@@ -1,0 +1,18 @@
+export default interface Settings {
+    window:number,
+    level: number,
+    stepSize: number,
+    densityScale: number,
+    offscreenBufferScale: number,
+    previousOffscreenBufferScale:number,
+    useGradient:number,
+    ambient: number,
+    densityForMarchSpaceSkipping: number,
+    skipMultiplier: number,
+    subtleSurfaceThreshold: number,
+    surfaceThreshold: number,
+    maxSteps: number,
+    minGradientMagnitude: number,
+    accumulatedThreshold: number,
+    transmittanceThreshold: number,
+}
