@@ -22,6 +22,7 @@ export class UnshadedColorPipeline {
 
         // Create shader module
         const shaderModule = this.device.createShaderModule({
+            label: 'unshaded color shader',
             code: shaderCode,
         });
 
@@ -38,11 +39,13 @@ export class UnshadedColorPipeline {
         // Create pool of uniform buffers and bind groups for widgets
         for (let i = 0; i < this.maxWidgets; i++) {
             const uniformBuffer = this.device.createBuffer({
+                label: `widget uniform buffer ${i}`,
                 size: 144 * 4, // viewProjection + model + color
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
 
             const bindGroup = this.device.createBindGroup({
+                label: `widget bind group ${i}`,
                 layout: this.bindGroupLayout,
                 entries: [{
                     binding: 0,

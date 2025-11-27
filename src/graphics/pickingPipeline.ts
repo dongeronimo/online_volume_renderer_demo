@@ -21,6 +21,7 @@ export class PickingPipeline {
 
         // Create shader module
         const shaderModule = this.device.createShaderModule({
+            label: 'picking shader',
             code: shaderCode,
         });
 
@@ -37,11 +38,13 @@ export class PickingPipeline {
         // Create pool of uniform buffers and bind groups
         for (let i = 0; i < this.maxObjects; i++) {
             const uniformBuffer = this.device.createBuffer({
-                size: 144, // viewProjection + model + objectId + padding = 64 + 64 + 16
+                label: `picking uniform buffer ${i}`,
+                size: 160, // viewProjection (64) + model (64) + objectId (4) + padding (12) + struct padding to 16-byte boundary
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             });
 
             const bindGroup = this.device.createBindGroup({
+                label: `picking bind group ${i}`,
                 layout: this.bindGroupLayout,
                 entries: [{
                     binding: 0,

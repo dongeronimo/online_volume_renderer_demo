@@ -16,12 +16,14 @@ export class CuttingCubePipeline {
 
         // Create uniform buffer (viewProjection + model matrix = 64 + 64 = 128 floats)
         this.uniformBuffer = this.device.createBuffer({
+            label: 'cutting cube uniform buffer',
             size: 128 * 4, // 128 floats * 4 bytes
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
         // Create shader module
         const shaderModule = this.device.createShaderModule({
+            label: 'cutting cube shader',
             code: shaderCode,
         });
 
@@ -37,6 +39,7 @@ export class CuttingCubePipeline {
 
         // Create bind group
         this.bindGroup = this.device.createBindGroup({
+            label: 'cutting cube bind group',
             layout: this.bindGroupLayout,
             entries: [{
                 binding: 0,

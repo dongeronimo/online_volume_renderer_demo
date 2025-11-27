@@ -31,12 +31,15 @@ export class PickingRenderTarget {
 
         // Create picking texture (r32uint - single channel 32-bit unsigned integer)
         this.pickingTexture = this.device.createTexture({
+            label: 'picking texture',
             size: { width, height },
             format: 'r32uint',
             usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
         });
 
-        this.pickingTextureView = this.pickingTexture.createView();
+        this.pickingTextureView = this.pickingTexture.createView({
+            label: 'picking texture view',
+        });
     }
 
     public getPickingTextureView(): GPUTextureView {
@@ -72,12 +75,15 @@ export class PickingRenderTarget {
         // Create staging buffer to read back the pixel
         const bytesPerPixel = 4; // r32uint = 4 bytes
         const stagingBuffer = this.device.createBuffer({
+            label: 'picking readback staging buffer',
             size: bytesPerPixel,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
         });
 
         // Create command encoder for the copy operation
-        const commandEncoder = this.device.createCommandEncoder();
+        const commandEncoder = this.device.createCommandEncoder({
+            label: 'picking readback encoder',
+        });
 
         // Copy single pixel from texture to buffer
         commandEncoder.copyTextureToBuffer(
