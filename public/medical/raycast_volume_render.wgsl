@@ -40,7 +40,9 @@ struct Uniforms {
   minGradientMagnitude: f32,
   accumulatedThreshold: f32,
   transmittanceThreshold: f32,
-  _padding5: vec3<f32>,
+  _padding5: f32,
+  _padding6: f32,
+  _padding7: f32,
   // CUTTING CUBE BOUNDS
   xmin: f32,
   xmax: f32,
@@ -301,10 +303,21 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
   while (t < tFar && stepCount < uniforms.maxSteps) {
     let scaledPos = scaledRayOrigin + rayDir * t;
     let pos = scaledPos * uniforms.voxelSpacing * 0.5 + vec3<f32>(0.5);  // Convert from [-1,1] to texture space [0,1]
-    
+
     // Clamp to volume bounds
     if (pos.x < 0.0 || pos.x > 1.0 || pos.y < 0.0 || pos.y > 1.0 || pos.z < 0.0 || pos.z > 1.0) {
       break;
+    }
+
+    // Check if position is outside cutting cube bounds (in world space [-1,1])
+    let worldPos = scaledPos * uniforms.voxelSpacing;
+    if (worldPos.x < uniforms.xmin || worldPos.x > uniforms.xmax ||
+        worldPos.y < uniforms.ymin || worldPos.y > uniforms.ymax ||
+        worldPos.z < uniforms.zmin || worldPos.z > uniforms.zmax) {
+      // Outside cutting cube bounds - skip this sample
+      t += uniforms.stepSize;
+      stepCount++;
+      continue;
     }
     
     // Get current chunk
