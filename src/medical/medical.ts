@@ -320,7 +320,13 @@ const graphicsContext = new GraphicsContext("canvas",
         volumeDepth: dicomMetadata!.numSlices!,
         volumeHeight: dicomMetadata!.height,
         volumeWidth:  dicomMetadata!.width,
-        voxelSpacing: voxelSpacingBuffer
+        voxelSpacing: voxelSpacingBuffer,
+        xmin: gCuttingCube?.xmin ?? -1.0,
+        xmax: gCuttingCube?.xmax ?? 1.0,
+        ymin: gCuttingCube?.ymin ?? -1.0,
+        ymax: gCuttingCube?.ymax ?? 1.0,
+        zmin: gCuttingCube?.zmin ?? -1.0,
+        zmax: gCuttingCube?.zmax ?? 1.0
       });
       let mesh = gMeshBufferManager.getMesh("cube")!;
       gCTFVolumeRenderPipeline?.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);

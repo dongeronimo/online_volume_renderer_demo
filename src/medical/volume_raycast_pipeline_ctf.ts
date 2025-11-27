@@ -12,11 +12,18 @@ export interface CTFVolumeUniforms {
   stepSize: number;
   densityScale: number;
   inverseModelMatrix: Float32Array;
-  voxelSpacing: Float32Array; 
+  voxelSpacing: Float32Array;
   toggleGradient: number;
-  volumeWidth: number;    
-  volumeHeight: number;   
-  volumeDepth: number;    
+  volumeWidth: number;
+  volumeHeight: number;
+  volumeDepth: number;
+  // CUTTING CUBE BOUNDS
+  xmin: number;
+  xmax: number;
+  ymin: number;
+  ymax: number;
+  zmin: number;
+  zmax: number;
 }
 
 export class VolumeRenderPipelineCTF {
@@ -307,7 +314,15 @@ private createHardcodedCTF(device: GPUDevice): GPUTexture {
     uint32View[81] = uniforms.volumeWidth;
     uint32View[82] = uniforms.volumeHeight;
     uint32View[83] = uniforms.volumeDepth;
-    
+
+    // CUTTING CUBE BOUNDS
+    data[84] = uniforms.xmin;
+    data[85] = uniforms.xmax;
+    data[86] = uniforms.ymin;
+    data[87] = uniforms.ymax;
+    data[88] = uniforms.zmin;
+    data[89] = uniforms.zmax;
+
     return data;
   }
 
