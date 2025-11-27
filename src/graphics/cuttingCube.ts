@@ -1,6 +1,14 @@
 import { mat4, vec3 } from "gl-matrix";
 
 /**
+ * Face widget descriptor
+ */
+export interface FaceWidget {
+    meshName: string;
+    modelMatrix: mat4;
+}
+
+/**
  * Represents a cutting cube with adjustable bounds
  * The cube's position and scale are derived from xmin, xmax, ymin, ymax, zmin, zmax
  * Coordinates are in the range [-1, 1] matching the volume renderer's coordinate system
@@ -15,6 +23,12 @@ export class CuttingCube {
 
     private _modelMatrix: mat4;
     private _isDirty: boolean = true;
+
+    // Face widget configuration
+    private _widgetMeshName: string = "cube";  // Mesh to use for all widgets
+    private _widgetScale: number = 0.05;        // Scale factor for widgets
+    private _widgetsNeedUpdate: boolean = true;
+    private _faceWidgets: FaceWidget[] = [];
 
     constructor(
         xmin: number = -1.0,
@@ -46,31 +60,37 @@ export class CuttingCube {
     set xmin(value: number) {
         this._xmin = value;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
     }
 
     set xmax(value: number) {
         this._xmax = value;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
     }
 
     set ymin(value: number) {
         this._ymin = value;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
     }
 
     set ymax(value: number) {
         this._ymax = value;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
     }
 
     set zmin(value: number) {
         this._zmin = value;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
     }
 
     set zmax(value: number) {
         this._zmax = value;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
     }
 
     /**
@@ -91,6 +111,23 @@ export class CuttingCube {
         this._zmin = zmin;
         this._zmax = zmax;
         this._isDirty = true;
+        this._widgetsNeedUpdate = true;
+    }
+
+    /**
+     * Set the mesh name to use for face widgets
+     */
+    public setWidgetMesh(meshName: string): void {
+        this._widgetMeshName = meshName;
+        this._widgetsNeedUpdate = true;
+    }
+
+    /**
+     * Set the scale factor for face widgets
+     */
+    public setWidgetScale(scale: number): void {
+        this._widgetScale = scale;
+        this._widgetsNeedUpdate = true;
     }
 
     /**
@@ -126,5 +163,80 @@ export class CuttingCube {
     public getModelMatrix(): mat4 {
         this.updateModelMatrix();
         return this._modelMatrix;
+    }
+
+    /**
+     * Calculate model matrices for the 6 face widgets
+     * Returns array of 6 FaceWidgets in order: +X, -X, +Y, -Y, +Z, -Z
+     */
+    private updateFaceWidgets(): void {
+        if (!this._widgetsNeedUpdate) {
+            return;
+        }
+
+        const centerX = (this._xmin + this._xmax) / 2.0;
+        const centerY = (this._ymin + this._ymax) / 2.0;
+        const centerZ = (this._zmin + this._zmax) / 2.0;
+
+        this._faceWidgets = [
+            // +X face (right)
+            {
+                meshName: this._widgetMeshName,
+                modelMatrix: this.createWidgetMatrix(this._xmax, centerY, centerZ)
+            },
+            // -X face (left)
+            {
+                meshName: this._widgetMeshName,
+                modelMatrix: this.createWidgetMatrix(this._xmin, centerY, centerZ)
+            },
+            // +Y face (top)
+            {
+                meshName: this._widgetMeshName,
+                modelMatrix: this.createWidgetMatrix(centerX, this._ymax, centerZ)
+            },
+            // -Y face (bottom)
+            {
+                meshName: this._widgetMeshName,
+                modelMatrix: this.createWidgetMatrix(centerX, this._ymin, centerZ)
+            },
+            // +Z face (front)
+            {
+                meshName: this._widgetMeshName,
+                modelMatrix: this.createWidgetMatrix(centerX, centerY, this._zmax)
+            },
+            // -Z face (back)
+            {
+                meshName: this._widgetMeshName,
+                modelMatrix: this.createWidgetMatrix(centerX, centerY, this._zmin)
+            }
+        ];
+
+        this._widgetsNeedUpdate = false;
+    }
+
+    /**
+     * Create a model matrix for a widget at the given position
+     */
+    private createWidgetMatrix(x: number, y: number, z: number): mat4 {
+        const matrix = mat4.create();
+        mat4.translate(matrix, matrix, vec3.fromValues(x, y, z));
+        mat4.scale(matrix, matrix, vec3.fromValues(this._widgetScale, this._widgetScale, this._widgetScale));
+        return matrix;
+    }
+
+    /**
+     * Get face widgets with their calculated model matrices
+     * Returns array of 6 FaceWidgets in order: +X, -X, +Y, -Y, +Z, -Z
+     */
+    public getFaceWidgets(): FaceWidget[] {
+        this.updateFaceWidgets();
+        return this._faceWidgets;
+    }
+
+    /**
+     * Get the mesh name used for face widgets
+     */
+    public getWidgetMeshName(): string {
+        return this._widgetMeshName;
     }
 }

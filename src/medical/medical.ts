@@ -17,6 +17,7 @@ import { Root } from "./ui/root";
 import { rootEventsTarget } from "./ui/events";
 import { CuttingCube } from "../graphics/cuttingCube";
 import { CuttingCubePipeline } from "../graphics/cuttingCubePipeline";
+import { UnshadedColorPipeline } from "../graphics/unshadedColorPipeline";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -31,6 +32,7 @@ let gCTFVolumeRenderPipeline: VolumeRenderPipelineCTF|undefined = undefined;
 let gQuadRendererPipeline: FullscreenQuadPipeline|undefined = undefined;
 let gCuttingCubePipeline: CuttingCubePipeline|undefined = undefined;
 let gCuttingCube: CuttingCube|undefined = undefined;
+let gWidgetPipeline: UnshadedColorPipeline|undefined = undefined;
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -186,6 +188,9 @@ const graphicsContext = new GraphicsContext("canvas",
     const cuttingCubeShaderCode = await fetch('shaders/cutting_cube.wgsl').then(r => r.text());
     gCuttingCubePipeline = new CuttingCubePipeline(ctx, cuttingCubeShaderCode, navigator.gpu.getPreferredCanvasFormat());
     gCuttingCube = new CuttingCube(-0.5, 0.5, -0.5, 0.5, -0.5, 0.5); // Start with a smaller cube
+    //WIDGETS: Create the unshaded color pipeline for face widgets
+    const widgetShaderCode = await fetch('shaders/unshaded_color.wgsl').then(r => r.text());
+    gWidgetPipeline = new UnshadedColorPipeline(ctx, widgetShaderCode, navigator.gpu.getPreferredCanvasFormat());
     //set up the event handler
     gMouseEventHandler = new RotateAround(ctx.Canvas(), gCamera,
       ()=>{ 
@@ -338,6 +343,28 @@ const graphicsContext = new GraphicsContext("canvas",
       gCuttingCubePipeline.updateUniforms(viewProj, gCuttingCube.getModelMatrix());
       let mesh = gMeshBufferManager.getMesh("cube")!;
       gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
+    }
+
+    // Render face widgets
+    if (gWidgetPipeline && gCuttingCube) {
+      const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+      const faceWidgets = gCuttingCube.getFaceWidgets();
+      const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
+
+      // Colors for each face widget (matching the cutting cube face colors)
+      const colors = [
+        [1.0, 0.0, 0.0, 1.0],  // +X (right) - Red
+        [0.0, 1.0, 1.0, 1.0],  // -X (left) - Cyan
+        [0.0, 1.0, 0.0, 1.0],  // +Y (top) - Green
+        [1.0, 0.0, 1.0, 1.0],  // -Y (bottom) - Magenta
+        [0.0, 0.0, 1.0, 1.0],  // +Z (front) - Blue
+        [1.0, 1.0, 0.0, 1.0],  // -Z (back) - Yellow
+      ];
+
+      faceWidgets.forEach((widget, index) => {
+        gWidgetPipeline!.updateUniforms(viewProj, widget.modelMatrix, colors[index]);
+        gWidgetPipeline!.render(offscreenRenderPass, widgetMesh.vertexBuffer, widgetMesh.indexBuffer, widgetMesh.indexCount);
+      });
     }
 
     offscreenRenderPass.end();
