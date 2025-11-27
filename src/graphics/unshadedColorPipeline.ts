@@ -5,21 +5,20 @@ import { mat4, vec4 } from "gl-matrix";
  * Pipeline for rendering unshaded, solid-color meshes
  * Used for UI widgets and interaction handles
  */
+interface WidgetResources {
+    uniformBuffer: GPUBuffer;
+    bindGroup: GPUBindGroup;
+}
+
 export class UnshadedColorPipeline {
     private device: GPUDevice;
     private pipeline: GPURenderPipeline;
-    private currentBindGroup: GPUBindGroup | undefined;
-    private uniformBuffer: GPUBuffer;
     private bindGroupLayout: GPUBindGroupLayout;
+    private widgetPool: WidgetResources[] = [];
+    private maxWidgets: number = 6; // 6 face widgets
 
     constructor(ctx: GraphicsContext, shaderCode: string, format: GPUTextureFormat) {
         this.device = ctx.Device();
-
-        // Create uniform buffer (viewProjection + model + color = 64 + 64 + 16 = 144 floats)
-        this.uniformBuffer = this.device.createBuffer({
-            size: 144 * 4, // 36 mat4x4 + vec4
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
 
         // Create shader module
         const shaderModule = this.device.createShaderModule({
@@ -36,7 +35,23 @@ export class UnshadedColorPipeline {
             }]
         });
 
-        // Don't create bind group here - create it per-draw
+        // Create pool of uniform buffers and bind groups for widgets
+        for (let i = 0; i < this.maxWidgets; i++) {
+            const uniformBuffer = this.device.createBuffer({
+                size: 144 * 4, // viewProjection + model + color
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            });
+
+            const bindGroup = this.device.createBindGroup({
+                layout: this.bindGroupLayout,
+                entries: [{
+                    binding: 0,
+                    resource: { buffer: uniformBuffer }
+                }]
+            });
+
+            this.widgetPool.push({ uniformBuffer, bindGroup });
+        }
 
         // Create pipeline layout
         const pipelineLayout = this.device.createPipelineLayout({
@@ -94,48 +109,43 @@ export class UnshadedColorPipeline {
     }
 
     /**
-     * Update uniforms with viewProjection, model matrix, and color
+     * Update and render a widget
+     * @param widgetIndex Index of the widget (0-5 for face widgets)
+     * @param viewProjection View-projection matrix
+     * @param model Model matrix
+     * @param color Widget color
+     * @param passEncoder Render pass encoder
+     * @param vertexBuffer Vertex buffer
+     * @param indexBuffer Index buffer
+     * @param indexCount Number of indices
      */
-    public updateUniforms(viewProjection: mat4, model: mat4, color: vec4): void {
-        const data = new Float32Array(36); // 2 matrices * 16 + 1 vec4
-
-        // Copy viewProjection matrix
-        data.set(viewProjection, 0);
-
-        // Copy model matrix
-        data.set(model, 16);
-
-        // Copy color
-        data.set(color, 32);
-
-        this.device.queue.writeBuffer(this.uniformBuffer, 0, data.buffer);
-
-        // Create a new bind group for this draw with the updated buffer
-        this.currentBindGroup = this.device.createBindGroup({
-            layout: this.bindGroupLayout,
-            entries: [{
-                binding: 0,
-                resource: { buffer: this.uniformBuffer }
-            }]
-        });
-    }
-
-    /**
-     * Render a mesh with the current uniforms
-     */
-    public render(
+    public renderWidget(
+        widgetIndex: number,
+        viewProjection: mat4,
+        model: mat4,
+        color: vec4,
         passEncoder: GPURenderPassEncoder,
         vertexBuffer: GPUBuffer,
         indexBuffer: GPUBuffer,
         indexCount: number
     ): void {
-        if (!this.currentBindGroup) {
-            console.error("updateUniforms must be called before render");
+        if (widgetIndex < 0 || widgetIndex >= this.maxWidgets) {
+            console.error(`Widget index ${widgetIndex} out of range [0, ${this.maxWidgets})`);
             return;
         }
 
+        const widget = this.widgetPool[widgetIndex];
+
+        // Update uniform buffer for this widget
+        const data = new Float32Array(36); // 2 matrices * 16 + 1 vec4
+        data.set(viewProjection, 0);
+        data.set(model, 16);
+        data.set(color, 32);
+        this.device.queue.writeBuffer(widget.uniformBuffer, 0, data.buffer);
+
+        // Render with this widget's bind group
         passEncoder.setPipeline(this.pipeline);
-        passEncoder.setBindGroup(0, this.currentBindGroup);
+        passEncoder.setBindGroup(0, widget.bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
         passEncoder.setIndexBuffer(indexBuffer, 'uint16');
         passEncoder.drawIndexed(indexCount);

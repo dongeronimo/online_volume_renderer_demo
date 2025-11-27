@@ -362,8 +362,16 @@ const graphicsContext = new GraphicsContext("canvas",
       ];
 
       faceWidgets.forEach((widget, index) => {
-        gWidgetPipeline!.updateUniforms(viewProj, widget.modelMatrix, colors[index]);
-        gWidgetPipeline!.render(offscreenRenderPass, widgetMesh.vertexBuffer, widgetMesh.indexBuffer, widgetMesh.indexCount);
+        gWidgetPipeline!.renderWidget(
+          index,
+          viewProj,
+          widget.modelMatrix,
+          colors[index],
+          offscreenRenderPass,
+          widgetMesh.vertexBuffer,
+          widgetMesh.indexBuffer,
+          widgetMesh.indexCount
+        );
       });
     }
 
