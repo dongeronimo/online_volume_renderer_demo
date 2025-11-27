@@ -18,6 +18,8 @@ import { rootEventsTarget } from "./ui/events";
 import { CuttingCube } from "../graphics/cuttingCube";
 import { CuttingCubePipeline } from "../graphics/cuttingCubePipeline";
 import { UnshadedColorPipeline } from "../graphics/unshadedColorPipeline";
+import { PickingPipeline } from "../graphics/pickingPipeline";
+import { PickingRenderTarget } from "./picking_render_target";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -33,6 +35,8 @@ let gQuadRendererPipeline: FullscreenQuadPipeline|undefined = undefined;
 let gCuttingCubePipeline: CuttingCubePipeline|undefined = undefined;
 let gCuttingCube: CuttingCube|undefined = undefined;
 let gWidgetPipeline: UnshadedColorPipeline|undefined = undefined;
+let gPickingPipeline: PickingPipeline|undefined = undefined;
+let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -191,16 +195,46 @@ const graphicsContext = new GraphicsContext("canvas",
     //WIDGETS: Create the unshaded color pipeline for face widgets
     const widgetShaderCode = await fetch('shaders/unshaded_color.wgsl').then(r => r.text());
     gWidgetPipeline = new UnshadedColorPipeline(ctx, widgetShaderCode, navigator.gpu.getPreferredCanvasFormat());
+    //PICKING: Create the picking pipeline and render target
+    const pickingShaderCode = await fetch('shaders/picking.wgsl').then(r => r.text());
+    gPickingPipeline = new PickingPipeline(ctx, pickingShaderCode);
+    gPickingRenderTarget.init(ctx.Device());
+    gPickingRenderTarget.createTarget(
+      Math.floor(ctx.Canvas().clientWidth * gOffscreenBufferScaleLQ),
+      Math.floor(ctx.Canvas().clientHeight * gOffscreenBufferScaleLQ)
+    );
     //set up the event handler
     gMouseEventHandler = new RotateAround(ctx.Canvas(), gCamera,
-      ()=>{ 
+      ()=>{
         usingHQ = false;
         numberOfHQRenderings = 0;
       },
-      ()=>{ 
+      ()=>{
         usingHQ = true;
         numberOfHQRenderings = 0;
       });
+
+    //PICKING: Set up click handler for object picking
+    ctx.Canvas().addEventListener('click', async (event) => {
+      const rect = ctx.Canvas().getBoundingClientRect();
+      const canvasX = event.clientX - rect.left;
+      const canvasY = event.clientY - rect.top;
+
+      // Scale coordinates to match picking buffer size
+      const scale = !usingHQ ? gOffscreenBufferScaleLQ : gOffscreenBufferScaleHQ;
+      const pickX = Math.floor(canvasX * scale);
+      const pickY = Math.floor(canvasY * scale);
+
+      // Read the object ID at the clicked pixel
+      const objectId = await gPickingRenderTarget.readPixel(pickX, pickY);
+
+      if (objectId > 0) {
+        const faceNames = ['+X (Red)', '-X (Cyan)', '+Y (Green)', '-Y (Magenta)', '+Z (Blue)', '-Z (Yellow)'];
+        console.log(`Clicked on face widget ${objectId}: ${faceNames[objectId - 1]}`);
+      } else {
+        console.log('Clicked on background (no widget)');
+      }
+    });
     //set up min and max
     gMinValue = parsed.huMin;
     gMaxValue = parsed.huMax;
@@ -225,17 +259,21 @@ const graphicsContext = new GraphicsContext("canvas",
     //if the user changed the scale in the ui, update the texture size here.
     if(usingHQ){
       if(gPreviousOffscreenBufferScaleHQ !== gOffscreenBufferScaleHQ){
-        gOffscreenRenderTarget.createTargets(ctx.Canvas().clientWidth * gOffscreenBufferScaleHQ, 
-          ctx.Canvas().clientHeight* gOffscreenBufferScaleHQ);
+        const width = Math.floor(ctx.Canvas().clientWidth * gOffscreenBufferScaleHQ);
+        const height = Math.floor(ctx.Canvas().clientHeight * gOffscreenBufferScaleHQ);
+        gOffscreenRenderTarget.createTargets(width, height);
         gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
+        gPickingRenderTarget.createTarget(width, height);
         gPreviousOffscreenBufferScaleHQ = gOffscreenBufferScaleHQ;
       }
     }
     else {
       if(gPreviousOffscreenBufferScaleLQ !== gOffscreenBufferScaleLQ){
-        gOffscreenRenderTarget.createTargets(ctx.Canvas().clientWidth * gOffscreenBufferScaleLQ, 
-          ctx.Canvas().clientHeight* gOffscreenBufferScaleLQ);
+        const width = Math.floor(ctx.Canvas().clientWidth * gOffscreenBufferScaleLQ);
+        const height = Math.floor(ctx.Canvas().clientHeight * gOffscreenBufferScaleLQ);
+        gOffscreenRenderTarget.createTargets(width, height);
         gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
+        gPickingRenderTarget.createTarget(width, height);
         gPreviousOffscreenBufferScaleLQ = gOffscreenBufferScaleLQ;
       }
     }
@@ -377,6 +415,39 @@ const graphicsContext = new GraphicsContext("canvas",
 
     offscreenRenderPass.end();
 
+    // PICKING PASS: Render widgets to picking buffer
+    if (gPickingPipeline && gCuttingCube) {
+      const pickingPass = commandEncoder.beginRenderPass({
+        label: 'Picking Render Pass',
+        colorAttachments: [{
+          view: gPickingRenderTarget.getPickingTextureView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 0 }, // Clear to 0 (no object)
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+
+      const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+      const faceWidgets = gCuttingCube.getFaceWidgets();
+      const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
+
+      // Render each widget with its ID (1-6, 0 is background)
+      faceWidgets.forEach((widget, index) => {
+        gPickingPipeline!.renderObject(
+          index,           // Object index in pool
+          index + 1,       // Object ID (1-6)
+          viewProj,
+          widget.modelMatrix,
+          pickingPass,
+          widgetMesh.vertexBuffer,
+          widgetMesh.indexBuffer,
+          widgetMesh.indexCount
+        );
+      });
+
+      pickingPass.end();
+    }
+
     const screenPass = commandEncoder.beginRenderPass({
       label: 'Screen Render Pass',
       colorAttachments: [{
@@ -394,11 +465,15 @@ const graphicsContext = new GraphicsContext("canvas",
     //Update the camera properties
     numberOfHQRenderings = 0; //we have to reset the number of high quality renders or else it won't render when we resize.
     const aspect = width / height;
-    gCamera.setPerspectiveReversedInfinite((30.0 * Math.PI) / 180, aspect, 0.1);  
+    gCamera.setPerspectiveReversedInfinite((30.0 * Math.PI) / 180, aspect, 0.1);
     //RENDERTARGET: Resize the render target
-    gOffscreenRenderTarget.createTargets(width * gOffscreenBufferScaleLQ, height * gOffscreenBufferScaleLQ);
+    const targetWidth = Math.floor(width * gOffscreenBufferScaleLQ);
+    const targetHeight = Math.floor(height * gOffscreenBufferScaleLQ);
+    gOffscreenRenderTarget.createTargets(targetWidth, targetHeight);
     //RENDERTARGET: Recreate the pipeline
     gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
+    //PICKING: Resize picking render target
+    gPickingRenderTarget.createTarget(targetWidth, targetHeight);
   },
   (adapter:GPUAdapter)=>{
     const desc:GPUDeviceDescriptor = {
