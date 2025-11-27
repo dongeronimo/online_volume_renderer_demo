@@ -15,6 +15,8 @@ import { config } from "./config";
 import { VolumeRenderPipelineCTF } from "./volume_raycast_pipeline_ctf";
 import { Root } from "./ui/root";
 import { rootEventsTarget } from "./ui/events";
+import { CuttingCube } from "../graphics/cuttingCube";
+import { CuttingCubePipeline } from "../graphics/cuttingCubePipeline";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -27,6 +29,8 @@ const gOffscreenRenderTarget = new OffscreenRenderTarget();
 let gVolumeRenderPipeline: VolumeRenderPipeline|undefined = undefined;
 let gCTFVolumeRenderPipeline: VolumeRenderPipelineCTF|undefined = undefined;
 let gQuadRendererPipeline: FullscreenQuadPipeline|undefined = undefined;
+let gCuttingCubePipeline: CuttingCubePipeline|undefined = undefined;
+let gCuttingCube: CuttingCube|undefined = undefined;
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -178,6 +182,10 @@ const graphicsContext = new GraphicsContext("canvas",
     //RENDERTARGET: Create a pipeline to draw the rendertarget
     gQuadRendererPipeline = new FullscreenQuadPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
     gQuadRendererPipeline.setTexture(gOffscreenRenderTarget.getColorTargetView());
+    //CUTTING CUBE: Create the cutting cube pipeline and instance
+    const cuttingCubeShaderCode = await fetch('shaders/cutting_cube.wgsl').then(r => r.text());
+    gCuttingCubePipeline = new CuttingCubePipeline(ctx, cuttingCubeShaderCode, navigator.gpu.getPreferredCanvasFormat());
+    gCuttingCube = new CuttingCube(-0.5, 0.5, -0.5, 0.5, -0.5, 0.5); // Start with a smaller cube
     //set up the event handler
     gMouseEventHandler = new RotateAround(ctx.Canvas(), gCamera,
       ()=>{ 
@@ -287,12 +295,12 @@ const graphicsContext = new GraphicsContext("canvas",
         minGradientMagnitude: !usingHQ?gMinGradientMagnitudeLQ:gMinGradientMagnitudeHQ,
         accumulatedThreshold: !usingHQ?gAccumulatedThresholdLQ:gAccumulatedThresholdHQ,
         transmittanceThreshold: !usingHQ?gTransmittanceThresholdLQ:gTransmittanceThresholdHQ,
-        xmin: -1.0,
-        xmax: 1.0,
-        ymin: -1.0,
-        ymax: 1.0,
-        zmin: -1.0,
-        zmax: 1.0
+        xmin: gCuttingCube?.xmin ?? -1.0,
+        xmax: gCuttingCube?.xmax ?? 1.0,
+        ymin: gCuttingCube?.ymin ?? -1.0,
+        ymax: gCuttingCube?.ymax ?? 1.0,
+        zmin: gCuttingCube?.zmin ?? -1.0,
+        zmax: gCuttingCube?.zmax ?? 1.0
       });
       let mesh = gMeshBufferManager.getMesh("cube")!
       // Render the volume (single cube with bricking acceleration)
@@ -317,6 +325,15 @@ const graphicsContext = new GraphicsContext("canvas",
       let mesh = gMeshBufferManager.getMesh("cube")!;
       gCTFVolumeRenderPipeline?.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
     }
+
+    // Render the cutting cube
+    if (gCuttingCubePipeline && gCuttingCube) {
+      const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+      gCuttingCubePipeline.updateUniforms(viewProj, gCuttingCube.getModelMatrix());
+      let mesh = gMeshBufferManager.getMesh("cube")!;
+      gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
+    }
+
     offscreenRenderPass.end();
 
     const screenPass = commandEncoder.beginRenderPass({
