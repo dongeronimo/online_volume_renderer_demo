@@ -104,8 +104,8 @@ export class CuttingCubePipeline {
                 frontFace: 'ccw',
             },
             depthStencil: {
-                depthWriteEnabled: true,
-                depthCompare: 'greater',
+                depthWriteEnabled: false,  // Don't write depth - overlay on top
+                depthCompare: 'always',     // Always pass depth test
                 format: 'depth24plus',
             },
         });
