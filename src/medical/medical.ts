@@ -63,6 +63,8 @@ let gOffscreenBufferScaleLQ: number = 0.5;
 let gOffscreenBufferScaleHQ: number = 1.0;
 let gPreviousOffscreenBufferScaleLQ:number = 0.5;
 let gPreviousOffscreenBufferScaleHQ:number = 1.0;
+let gPreviousCanvasWidth: number = 0;
+let gPreviousCanvasHeight: number = 0;
 let gUseGradientLQ = 0;
 let gUseGradientHQ = 1;
 let gDensityForMarchSpaceSkippingLQ: number = 0.02;
@@ -258,25 +260,33 @@ const graphicsContext = new GraphicsContext("canvas",
       return;
     else if(usingHQ)
       numberOfHQRenderings++;
-    //if the user changed the scale in the ui, update the texture size here.
+    //if the user changed the scale in the ui or the canvas was resized, update the texture size here.
+    const currentCanvasWidth = ctx.Canvas().clientWidth;
+    const currentCanvasHeight = ctx.Canvas().clientHeight;
+    const canvasSizeChanged = (gPreviousCanvasWidth !== currentCanvasWidth || gPreviousCanvasHeight !== currentCanvasHeight);
+
     if(usingHQ){
-      if(gPreviousOffscreenBufferScaleHQ !== gOffscreenBufferScaleHQ){
-        const width = Math.floor(ctx.Canvas().clientWidth * gOffscreenBufferScaleHQ);
-        const height = Math.floor(ctx.Canvas().clientHeight * gOffscreenBufferScaleHQ);
+      if(gPreviousOffscreenBufferScaleHQ !== gOffscreenBufferScaleHQ || canvasSizeChanged){
+        const width = Math.floor(currentCanvasWidth * gOffscreenBufferScaleHQ);
+        const height = Math.floor(currentCanvasHeight * gOffscreenBufferScaleHQ);
         gOffscreenRenderTarget.createTargets(width, height);
         gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
         gPickingRenderTarget.createTarget(width, height);
         gPreviousOffscreenBufferScaleHQ = gOffscreenBufferScaleHQ;
+        gPreviousCanvasWidth = currentCanvasWidth;
+        gPreviousCanvasHeight = currentCanvasHeight;
       }
     }
     else {
-      if(gPreviousOffscreenBufferScaleLQ !== gOffscreenBufferScaleLQ){
-        const width = Math.floor(ctx.Canvas().clientWidth * gOffscreenBufferScaleLQ);
-        const height = Math.floor(ctx.Canvas().clientHeight * gOffscreenBufferScaleLQ);
+      if(gPreviousOffscreenBufferScaleLQ !== gOffscreenBufferScaleLQ || canvasSizeChanged){
+        const width = Math.floor(currentCanvasWidth * gOffscreenBufferScaleLQ);
+        const height = Math.floor(currentCanvasHeight * gOffscreenBufferScaleLQ);
         gOffscreenRenderTarget.createTargets(width, height);
         gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
         gPickingRenderTarget.createTarget(width, height);
         gPreviousOffscreenBufferScaleLQ = gOffscreenBufferScaleLQ;
+        gPreviousCanvasWidth = currentCanvasWidth;
+        gPreviousCanvasHeight = currentCanvasHeight;
       }
     }
     //create the render pass
