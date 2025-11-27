@@ -41,6 +41,7 @@ let numberOfHQRenderings = 0;
 let gMinValue = 0;
 let gMaxValue = 1;
 //parameters controlled by the ui
+//FIXME: I should be using the fields in the react's RendererProvider.
 let gWindow:number = 300;
 let gLevel: number = 100;
 let gDensityScale: number = 0.5;
@@ -62,8 +63,8 @@ let gSubtleSurfaceThresholdLQ: number = 0.01;
 let gSubtleSurfaceThresholdHQ: number = 0.01;
 let gSurfaceThresholdLQ: number = 0.02;
 let gSurfaceThresholdHQ: number = 0.02;
-let gMaxStepsLQ: number = 196;
-let gMaxStepsHQ: number = 256;
+let gMaxStepsLQ: number = 512;
+let gMaxStepsHQ: number = 4096;
 let gMinGradientMagnitudeLQ: number = 0.01;
 let gMinGradientMagnitudeHQ: number = 0.01;
 let gAccumulatedThresholdLQ: number = 0.95;

@@ -104,8 +104,8 @@ fn evaluateCTF(density: f32) -> vec4<f32> {
 }
 
 fn rayBoxIntersection(rayOrigin: vec3<f32>, rayDir: vec3<f32>) -> vec2<f32> {
-  let boxMin = vec3<f32>(-0.5) / uniforms.voxelSpacing;
-  let boxMax = vec3<f32>(0.5) / uniforms.voxelSpacing;
+  let boxMin = vec3<f32>(-1.0) / uniforms.voxelSpacing;  // Cube is [-1, 1]
+  let boxMax = vec3<f32>(1.0) / uniforms.voxelSpacing;   // Cube is [-1, 1]
   
   let invDir = 1.0 / rayDir;
   let t0 = (boxMin - rayOrigin) * invDir;
@@ -155,7 +155,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
   // Raymarching loop
   while (t < tFar && stepCount < maxSteps) {
     let scaledPos = scaledRayOrigin + rayDir * t;
-    let pos = scaledPos * uniforms.voxelSpacing + vec3<f32>(0.5);
+    let pos = scaledPos * uniforms.voxelSpacing * 0.5 + vec3<f32>(0.5);  // Convert from [-1,1] to texture space [0,1]
     
     if (pos.x < 0.0 || pos.x > 1.0 || pos.y < 0.0 || pos.y > 1.0 || pos.z < 0.0 || pos.z > 1.0) {
       break;
