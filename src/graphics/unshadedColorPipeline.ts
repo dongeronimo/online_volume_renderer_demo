@@ -8,7 +8,7 @@ import { mat4, vec4 } from "gl-matrix";
 export class UnshadedColorPipeline {
     private device: GPUDevice;
     private pipeline: GPURenderPipeline;
-    private bindGroup: GPUBindGroup;
+    private currentBindGroup: GPUBindGroup | undefined;
     private uniformBuffer: GPUBuffer;
     private bindGroupLayout: GPUBindGroupLayout;
 
@@ -36,14 +36,7 @@ export class UnshadedColorPipeline {
             }]
         });
 
-        // Create bind group
-        this.bindGroup = this.device.createBindGroup({
-            layout: this.bindGroupLayout,
-            entries: [{
-                binding: 0,
-                resource: { buffer: this.uniformBuffer }
-            }]
-        });
+        // Don't create bind group here - create it per-draw
 
         // Create pipeline layout
         const pipelineLayout = this.device.createPipelineLayout({
@@ -116,6 +109,15 @@ export class UnshadedColorPipeline {
         data.set(color, 32);
 
         this.device.queue.writeBuffer(this.uniformBuffer, 0, data.buffer);
+
+        // Create a new bind group for this draw with the updated buffer
+        this.currentBindGroup = this.device.createBindGroup({
+            layout: this.bindGroupLayout,
+            entries: [{
+                binding: 0,
+                resource: { buffer: this.uniformBuffer }
+            }]
+        });
     }
 
     /**
@@ -127,8 +129,13 @@ export class UnshadedColorPipeline {
         indexBuffer: GPUBuffer,
         indexCount: number
     ): void {
+        if (!this.currentBindGroup) {
+            console.error("updateUniforms must be called before render");
+            return;
+        }
+
         passEncoder.setPipeline(this.pipeline);
-        passEncoder.setBindGroup(0, this.bindGroup);
+        passEncoder.setBindGroup(0, this.currentBindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
         passEncoder.setIndexBuffer(indexBuffer, 'uint16');
         passEncoder.drawIndexed(indexCount);
