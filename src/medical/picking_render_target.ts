@@ -115,8 +115,14 @@ export class PickingRenderTarget {
         // Wait for GPU to complete and map buffer
         await stagingBuffer.mapAsync(GPUMapMode.READ);
         const data = new Uint32Array(stagingBuffer.getMappedRange());
+
+        // Debug: log first few values
+        console.log(`ReadPixel at (${x}, ${y}) clamped to (${clampedX}, ${clampedY}), copyWidth: ${copyWidth}, buffer data[0-4]:`,
+                    data[0], data[1], data[2], data[3], data[4]);
+
         // Index into the horizontal strip to get our target pixel
-        const objectId = data[clampedX];
+        // Make sure we don't read beyond the copied data
+        const objectId = clampedX < copyWidth ? data[clampedX] : 0;
 
         stagingBuffer.unmap();
         stagingBuffer.destroy();
