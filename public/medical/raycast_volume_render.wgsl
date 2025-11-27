@@ -171,8 +171,8 @@ fn applyWindowLevel(value: f32, center: f32, width: f32) -> f32 {
 
 // Ray-box intersection
 fn rayBoxIntersection(rayOrigin: vec3<f32>, rayDir: vec3<f32>) -> vec2<f32> {
-  let boxMin = vec3<f32>(-0.5) / uniforms.voxelSpacing;  // Cube is [-0.5, 0.5]
-  let boxMax = vec3<f32>(0.5) / uniforms.voxelSpacing;   // Cube is [-0.5, 0.5]
+  let boxMin = vec3<f32>(-1.0) / uniforms.voxelSpacing;  // Cube is [-1, 1]
+  let boxMax = vec3<f32>(1.0) / uniforms.voxelSpacing;   // Cube is [-1, 1]
   
   let invDir = 1.0 / rayDir;
   let t0 = (boxMin - rayOrigin) * invDir;
@@ -293,7 +293,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
   // Raymarching with bricking acceleration (unchanged)
   while (t < tFar && stepCount < uniforms.maxSteps) {
     let scaledPos = scaledRayOrigin + rayDir * t;
-    let pos = scaledPos * uniforms.voxelSpacing + vec3<f32>(0.5);  // Convert to texture space [0,1]
+    let pos = scaledPos * uniforms.voxelSpacing * 0.5 + vec3<f32>(0.5);  // Convert from [-1,1] to texture space [0,1]
     
     // Clamp to volume bounds
     if (pos.x < 0.0 || pos.x > 1.0 || pos.y < 0.0 || pos.y > 1.0 || pos.z < 0.0 || pos.z > 1.0) {
