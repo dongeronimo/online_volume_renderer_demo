@@ -20,7 +20,7 @@ struct Uniforms {
   windowWidth: f32,
   _padding2: f32,
   _padding3: f32,
-  voxelSpacing: vec3<f32>, 
+  voxelSpacing: vec3<f32>,
   _padding4: f32,
   toggleGradient: u32,
   volumeWidth: u32,
@@ -41,6 +41,13 @@ struct Uniforms {
   accumulatedThreshold: f32,
   transmittanceThreshold: f32,
   _padding5: vec3<f32>,
+  // CUTTING CUBE BOUNDS
+  xmin: f32,
+  xmax: f32,
+  ymin: f32,
+  ymax: f32,
+  zmin: f32,
+  zmax: f32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;

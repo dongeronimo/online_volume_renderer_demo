@@ -13,7 +13,7 @@ export interface VolumeUniforms {
   inverseModelMatrix: Float32Array;
   windowCenter: number;
   windowWidth: number;
-  voxelSpacing: Float32Array; 
+  voxelSpacing: Float32Array;
   toggleGradient: number;
   volumeWidth: number;
   volumeHeight: number;
@@ -32,6 +32,13 @@ export interface VolumeUniforms {
   minGradientMagnitude: number;
   accumulatedThreshold: number;
   transmittanceThreshold: number;
+  // CUTTING CUBE BOUNDS
+  xmin: number;
+  xmax: number;
+  ymin: number;
+  ymax: number;
+  zmin: number;
+  zmax: number;
 }
 
 export class VolumeRenderPipeline {
@@ -249,7 +256,7 @@ export class VolumeRenderPipeline {
     uint32View[81] = uniforms.volumeWidth;
     uint32View[82] = uniforms.volumeHeight;
     uint32View[83] = uniforms.volumeDepth;
-    
+
     uint32View[84] = uniforms.chunkSize;
     uint32View[85] = uniforms.numChunksX;
     uint32View[86] = uniforms.numChunksY;
@@ -262,12 +269,20 @@ export class VolumeRenderPipeline {
     data[91] = uniforms.subtleSurfaceThreshold;
 
     data[92] = uniforms.surfaceThreshold;
-    
+
     uint32View[93] = uniforms.maxSteps;
     data[94] = uniforms.minGradientMagnitude;
     data[95] = uniforms.accumulatedThreshold;
-    
+
     data[96] = uniforms.transmittanceThreshold;
+
+    // CUTTING CUBE BOUNDS
+    data[100] = uniforms.xmin;
+    data[101] = uniforms.xmax;
+    data[102] = uniforms.ymin;
+    data[103] = uniforms.ymax;
+    data[104] = uniforms.zmin;
+    data[105] = uniforms.zmax;
 
     return data;
   }

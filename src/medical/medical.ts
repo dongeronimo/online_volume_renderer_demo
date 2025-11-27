@@ -267,8 +267,8 @@ const graphicsContext = new GraphicsContext("canvas",
         stepSize: !usingHQ?gStepSizeLQ:gStepSizeHQ,
         densityScale: gDensityScale,
         inverseModelMatrix: volumeRoot!.transform!.getInverseWorldMatrix(),
-        windowCenter: gLevel, 
-        windowWidth: gWindow, 
+        windowCenter: gLevel,
+        windowWidth: gWindow,
         voxelSpacing: voxelSpacingBuffer,
         toggleGradient: !usingHQ?gUseGradientLQ:gUseGradientHQ,
         volumeWidth: dicomMetadata!.width,
@@ -286,7 +286,13 @@ const graphicsContext = new GraphicsContext("canvas",
         maxSteps: !usingHQ?gMaxStepsLQ:gMaxStepsHQ,
         minGradientMagnitude: !usingHQ?gMinGradientMagnitudeLQ:gMinGradientMagnitudeHQ,
         accumulatedThreshold: !usingHQ?gAccumulatedThresholdLQ:gAccumulatedThresholdHQ,
-        transmittanceThreshold: !usingHQ?gTransmittanceThresholdLQ:gTransmittanceThresholdHQ
+        transmittanceThreshold: !usingHQ?gTransmittanceThresholdLQ:gTransmittanceThresholdHQ,
+        xmin: -1.0,
+        xmax: 1.0,
+        ymin: -1.0,
+        ymax: 1.0,
+        zmin: -1.0,
+        zmax: 1.0
       });
       let mesh = gMeshBufferManager.getMesh("cube")!
       // Render the volume (single cube with bricking acceleration)
