@@ -72,11 +72,18 @@ export class PickingRenderTarget {
         const clampedX = Math.floor(Math.max(0, Math.min(x, this.width - 1)));
         const clampedY = Math.floor(Math.max(0, Math.min(y, this.height - 1)));
 
-        // Create staging buffer to read back the pixel
-        const bytesPerPixel = 4; // r32uint = 4 bytes
+        // WebGPU requires bytesPerRow to be a multiple of 256
+        // For r32uint (4 bytes/pixel), we need to copy at least 64 pixels
+        const bytesPerPixel = 4;
+        const minPixelsPerRow = 256 / bytesPerPixel; // 64 pixels
+        const copyWidth = Math.min(minPixelsPerRow, this.width);
+        const copyHeight = 1;
+        const bufferSize = minPixelsPerRow * bytesPerPixel; // 256 bytes minimum
+
+        // Create staging buffer for a horizontal strip
         const stagingBuffer = this.device.createBuffer({
             label: 'picking readback staging buffer',
-            size: bytesPerPixel,
+            size: bufferSize,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
         });
 
@@ -85,20 +92,20 @@ export class PickingRenderTarget {
             label: 'picking readback encoder',
         });
 
-        // Copy single pixel from texture to buffer
+        // Copy a 64-pixel horizontal strip from the row containing our target pixel
         commandEncoder.copyTextureToBuffer(
             {
                 texture: this.pickingTexture,
-                origin: { x: clampedX, y: clampedY, z: 0 },
+                origin: { x: 0, y: clampedY, z: 0 },
             },
             {
                 buffer: stagingBuffer,
-                bytesPerRow: bytesPerPixel,
-                rowsPerImage: 1,
+                bytesPerRow: 256,
+                rowsPerImage: copyHeight,
             },
             {
-                width: 1,
-                height: 1,
+                width: copyWidth,
+                height: copyHeight,
                 depthOrArrayLayers: 1,
             }
         );
@@ -108,7 +115,8 @@ export class PickingRenderTarget {
         // Wait for GPU to complete and map buffer
         await stagingBuffer.mapAsync(GPUMapMode.READ);
         const data = new Uint32Array(stagingBuffer.getMappedRange());
-        const objectId = data[0];
+        // Index into the horizontal strip to get our target pixel
+        const objectId = data[clampedX];
 
         stagingBuffer.unmap();
         stagingBuffer.destroy();
