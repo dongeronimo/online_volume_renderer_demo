@@ -80,6 +80,10 @@ export class PickingRenderTarget {
         const copyHeight = 1;
         const bufferSize = minPixelsPerRow * bytesPerPixel; // 256 bytes minimum
 
+        // Calculate starting X position for the copy to include our target pixel
+        // Try to center the target pixel in the strip, but adjust for edges
+        const copyStartX = Math.max(0, Math.min(clampedX - Math.floor(copyWidth / 2), this.width - copyWidth));
+
         // Create staging buffer for a horizontal strip
         const stagingBuffer = this.device.createBuffer({
             label: 'picking readback staging buffer',
@@ -92,11 +96,11 @@ export class PickingRenderTarget {
             label: 'picking readback encoder',
         });
 
-        // Copy a 64-pixel horizontal strip from the row containing our target pixel
+        // Copy a 64-pixel horizontal strip that includes our target pixel
         commandEncoder.copyTextureToBuffer(
             {
                 texture: this.pickingTexture,
-                origin: { x: 0, y: clampedY, z: 0 },
+                origin: { x: copyStartX, y: clampedY, z: 0 },
             },
             {
                 buffer: stagingBuffer,
@@ -116,13 +120,11 @@ export class PickingRenderTarget {
         await stagingBuffer.mapAsync(GPUMapMode.READ);
         const data = new Uint32Array(stagingBuffer.getMappedRange());
 
-        // Debug: log first few values
-        console.log(`ReadPixel at (${x}, ${y}) clamped to (${clampedX}, ${clampedY}), copyWidth: ${copyWidth}, buffer data[0-4]:`,
-                    data[0], data[1], data[2], data[3], data[4]);
+        // Index into the buffer using offset from copy start
+        const bufferIndex = clampedX - copyStartX;
+        const objectId = data[bufferIndex];
 
-        // Index into the horizontal strip to get our target pixel
-        // Make sure we don't read beyond the copied data
-        const objectId = clampedX < copyWidth ? data[clampedX] : 0;
+        console.log(`ReadPixel at (${x}, ${y}) clamped to (${clampedX}, ${clampedY}), copyStartX: ${copyStartX}, copyWidth: ${copyWidth}, bufferIndex: ${bufferIndex}, objectId: ${objectId}`);
 
         stagingBuffer.unmap();
         stagingBuffer.destroy();
