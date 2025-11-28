@@ -39,8 +39,6 @@ let gWidgetPipeline: UnshadedColorPipeline|undefined = undefined;
 let gPickingPipeline: PickingPipeline|undefined = undefined;
 let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
 let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
-let gSelectedWidgetId: number | null = null;
-let gFrameCount: number = 0; // For pulsing animation
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -229,9 +227,8 @@ const graphicsContext = new GraphicsContext("canvas",
       gCamera
     );
 
-    // Set selection callback to manage quality mode and selection state
+    // Set selection callback to manage quality mode
     gWidgetDragHandler.setSelectionCallback((widgetId: number | null) => {
-      gSelectedWidgetId = widgetId;
       if (widgetId !== null) {
         // Widget selected - switch to LQ mode
         usingHQ = false;
@@ -401,7 +398,7 @@ const graphicsContext = new GraphicsContext("canvas",
       gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
     }
 
-    // Render face widgets (with glow effect for selected widget)
+    // Render face widgets
     if (gWidgetPipeline && gCuttingCube) {
       const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
       const faceWidgets = gCuttingCube.getFaceWidgets();
@@ -417,42 +414,7 @@ const graphicsContext = new GraphicsContext("canvas",
         [1.0, 1.0, 0.0, 1.0],  // -Z (back) - Yellow
       ];
 
-      // Render glow for selected widget first (if any)
-      if (gSelectedWidgetId !== null && gSelectedWidgetId >= 1 && gSelectedWidgetId <= 6) {
-        const selectedIndex = gSelectedWidgetId - 1;
-        const selectedWidget = faceWidgets[selectedIndex];
-
-        // Calculate pulsing scale
-        const pulseSpeed = 4.0;
-        const pulseAmount = 0.1;
-        const pulse = 1.0 + pulseAmount * Math.sin(gFrameCount * 0.016 * pulseSpeed); // 0.016 ≈ 1/60
-
-        // Create scaled model matrix for glow
-        const glowScale = 1.2 * pulse;
-        const glowMatrix = mat4.create();
-        mat4.copy(glowMatrix, selectedWidget.modelMatrix);
-        // Extract translation, scale by glow amount, reapply
-        const translation = vec3.create();
-        mat4.getTranslation(translation, glowMatrix);
-        mat4.identity(glowMatrix);
-        mat4.translate(glowMatrix, glowMatrix, translation);
-        mat4.scale(glowMatrix, glowMatrix, vec3.fromValues(glowScale, glowScale, glowScale));
-
-        // Render glow (bright white/color with transparency)
-        const glowColor = [1.0, 1.0, 1.0, 0.4]; // Bright white glow
-        gWidgetPipeline!.renderWidget(
-          selectedIndex,
-          viewProj,
-          glowMatrix,
-          glowColor,
-          offscreenRenderPass,
-          widgetMesh.vertexBuffer,
-          widgetMesh.indexBuffer,
-          widgetMesh.indexCount
-        );
-      }
-
-      // Render all widgets normally
+      // Render all widgets
       faceWidgets.forEach((widget, index) => {
         gWidgetPipeline!.renderWidget(
           index,
@@ -466,9 +428,6 @@ const graphicsContext = new GraphicsContext("canvas",
         );
       });
     }
-
-    // Increment frame counter for animation
-    gFrameCount++;
 
     offscreenRenderPass.end();
 

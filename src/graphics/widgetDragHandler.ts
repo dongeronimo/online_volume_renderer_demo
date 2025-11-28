@@ -221,15 +221,16 @@ export class WidgetDragHandler {
 
     /**
      * Get the axis direction for a widget
+     * Axis points in the direction to INCREASE the bound value
      */
     private getWidgetAxis(widgetId: number): vec3 {
         switch (widgetId) {
-            case 1: return vec3.fromValues(1, 0, 0);  // +X
-            case 2: return vec3.fromValues(-1, 0, 0); // -X
-            case 3: return vec3.fromValues(0, 1, 0);  // +Y
-            case 4: return vec3.fromValues(0, -1, 0); // -Y
-            case 5: return vec3.fromValues(0, 0, 1);  // +Z
-            case 6: return vec3.fromValues(0, 0, -1); // -Z
+            case 1: return vec3.fromValues(1, 0, 0);  // +X face → increase xmax
+            case 2: return vec3.fromValues(1, 0, 0);  // -X face → increase xmin (toward center)
+            case 3: return vec3.fromValues(0, 1, 0);  // +Y face → increase ymax
+            case 4: return vec3.fromValues(0, 1, 0);  // -Y face → increase ymin (toward center)
+            case 5: return vec3.fromValues(0, 0, 1);  // +Z face → increase zmax
+            case 6: return vec3.fromValues(0, 0, 1);  // -Z face → increase zmin (toward center)
             default: return vec3.fromValues(0, 0, 0);
         }
     }
