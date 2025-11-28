@@ -124,8 +124,6 @@ export class PickingRenderTarget {
         const bufferIndex = clampedX - copyStartX;
         const objectId = data[bufferIndex];
 
-        console.log(`ReadPixel at (${x}, ${y}) clamped to (${clampedX}, ${clampedY}), copyStartX: ${copyStartX}, copyWidth: ${copyWidth}, bufferIndex: ${bufferIndex}, objectId: ${objectId}`);
-
         stagingBuffer.unmap();
         stagingBuffer.destroy();
 

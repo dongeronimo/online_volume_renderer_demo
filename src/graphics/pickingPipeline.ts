@@ -143,8 +143,6 @@ export class PickingPipeline {
         uint32View[32] = objectId;      // Offset 32 (u32)
         // Padding at 33, 34, 35 automatically set to 0
 
-        console.log(`Picking: rendering object ${objectId}, index ${objectIndex}, indexCount ${indexCount}`);
-
         this.device.queue.writeBuffer(resources.uniformBuffer, 0, data.buffer);
 
         // Render with this object's bind group

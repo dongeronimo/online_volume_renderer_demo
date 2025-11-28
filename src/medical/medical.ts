@@ -227,16 +227,12 @@ const graphicsContext = new GraphicsContext("canvas",
       const pickX = Math.floor(canvasX * scale);
       const pickY = Math.floor(canvasY * scale);
 
-      console.log(`Click: canvas(${canvasX.toFixed(1)}, ${canvasY.toFixed(1)}) -> picking(${pickX}, ${pickY}), buffer size: ${gPickingRenderTarget.getWidth()}x${gPickingRenderTarget.getHeight()}`);
-
       // Read the object ID at the clicked pixel
       const objectId = await gPickingRenderTarget.readPixel(pickX, pickY);
 
       if (objectId > 0) {
         const faceNames = ['+X (Red)', '-X (Cyan)', '+Y (Green)', '-Y (Magenta)', '+Z (Blue)', '-Z (Yellow)'];
         console.log(`Clicked on face widget ${objectId}: ${faceNames[objectId - 1]}`);
-      } else {
-        console.log(`Clicked on background (no widget), objectId: ${objectId}`);
       }
     });
     //set up min and max
