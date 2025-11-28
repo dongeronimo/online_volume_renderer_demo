@@ -1,6 +1,8 @@
 import type { CuttingCube } from "./cuttingCube";
 import type { PickingRenderTarget } from "../medical/picking_render_target";
 import type RotateAround from "../medical/mouse_events";
+import type { Camera } from "./entities/gameObject";
+import { mat4, vec3, vec4 } from "gl-matrix";
 
 /**
  * Handles mouse and touch interaction for dragging cutting cube face widgets
@@ -15,9 +17,9 @@ import type RotateAround from "../medical/mouse_events";
 export class WidgetDragHandler {
     private isDragging: boolean = false;
     private draggedWidgetId: number | null = null;
+    private dragStartScreenX: number = 0;
     private dragStartScreenY: number = 0;
     private dragStartBoundValue: number = 0;
-    private canvasHeight: number = 0;
 
     // Callback for when widget selection changes
     private onSelectionChange: ((widgetId: number | null) => void) | null = null;
@@ -26,7 +28,8 @@ export class WidgetDragHandler {
         private canvas: HTMLCanvasElement,
         private pickingRenderTarget: PickingRenderTarget,
         private cuttingCube: CuttingCube,
-        private rotateAround: RotateAround
+        private rotateAround: RotateAround,
+        private camera: Camera
     ) {
         this.setupEventListeners();
     }
@@ -59,11 +62,11 @@ export class WidgetDragHandler {
         this.canvas.addEventListener('touchcancel', this.handleTouchEnd.bind(this));
     }
 
-    private handlePointerDown(event: MouseEvent): void {
+    private async handlePointerDown(event: MouseEvent): Promise<void> {
         const rect = this.canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
-        this.tryStartDrag(x, y);
+        await this.tryStartDrag(x, y);
     }
 
     private async handleTouchStart(event: TouchEvent): Promise<void> {
@@ -100,8 +103,8 @@ export class WidgetDragHandler {
             // Widget clicked - start drag
             this.isDragging = true;
             this.draggedWidgetId = objectId;
+            this.dragStartScreenX = screenX;
             this.dragStartScreenY = screenY;
-            this.canvasHeight = canvasHeight;
 
             // Store initial bound value
             this.dragStartBoundValue = this.getBoundValue(objectId);
@@ -124,8 +127,9 @@ export class WidgetDragHandler {
         if (!this.isDragging) return;
 
         const rect = this.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
-        this.updateDrag(y);
+        this.updateDrag(x, y);
     }
 
     private handleTouchMove(event: TouchEvent): void {
@@ -133,22 +137,59 @@ export class WidgetDragHandler {
 
         const touch = event.touches[0];
         const rect = this.canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
         const y = touch.clientY - rect.top;
-        this.updateDrag(y);
+        this.updateDrag(x, y);
 
         event.preventDefault(); // Prevent scrolling during drag
     }
 
-    private updateDrag(currentScreenY: number): void {
+    private updateDrag(currentScreenX: number, currentScreenY: number): void {
         if (!this.isDragging || this.draggedWidgetId === null) return;
 
-        // Calculate screen space delta (negative because Y increases downward)
-        const deltaY = -(currentScreenY - this.dragStartScreenY);
+        // Get the widget's axis direction in world space
+        const axis = this.getWidgetAxis(this.draggedWidgetId);
 
-        // Convert to world space delta
-        // Scale by viewport height and apply sensitivity
-        const sensitivity = 2.0; // Adjust this to change drag sensitivity
-        const worldDelta = (deltaY / this.canvasHeight) * sensitivity;
+        // Get the widget's current world position
+        const widgetPos = this.getWidgetPosition(this.draggedWidgetId);
+
+        // Calculate a second point along the axis for direction projection
+        const axisEnd = vec3.create();
+        vec3.scaleAndAdd(axisEnd, widgetPos, axis, 1.0);
+
+        // Project both points to screen space
+        const viewProj = mat4.create();
+        mat4.multiply(viewProj, this.camera.projectionMatrix, this.camera.viewMatrix);
+
+        const screenStart = this.worldToScreen(widgetPos, viewProj);
+        const screenEnd = this.worldToScreen(axisEnd, viewProj);
+
+        // Get screen-space direction (normalized)
+        const screenDir = vec3.create();
+        vec3.subtract(screenDir, screenEnd, screenStart);
+        const screenDirLength = vec3.length(screenDir);
+
+        if (screenDirLength < 0.001) {
+            // Axis is perpendicular to view, can't drag
+            return;
+        }
+
+        vec3.scale(screenDir, screenDir, 1.0 / screenDirLength);
+
+        // Calculate mouse delta in screen space
+        const mouseDelta = vec3.fromValues(
+            currentScreenX - this.dragStartScreenX,
+            currentScreenY - this.dragStartScreenY,
+            0
+        );
+
+        // Project mouse delta onto screen-space axis direction
+        const projectedDelta = vec3.dot(mouseDelta, screenDir);
+
+        // Convert to world delta
+        // The screen direction's length tells us how much screen space = 1 world unit
+        const sensitivity = 0.5; // Lower = more sensitive
+        const worldDelta = (projectedDelta / screenDirLength) * sensitivity;
 
         // Calculate new bound value
         let newBound = this.dragStartBoundValue + worldDelta;
@@ -158,6 +199,58 @@ export class WidgetDragHandler {
 
         // Update the corresponding bound
         this.setBoundValue(this.draggedWidgetId, newBound);
+    }
+
+    /**
+     * Project a world position to screen coordinates
+     */
+    private worldToScreen(worldPos: vec3, viewProj: mat4): vec3 {
+        const clipPos = vec4.create();
+        vec4.transformMat4(clipPos, vec4.fromValues(worldPos[0], worldPos[1], worldPos[2], 1.0), viewProj);
+
+        // Perspective divide
+        const ndcX = clipPos[0] / clipPos[3];
+        const ndcY = clipPos[1] / clipPos[3];
+
+        // Convert NDC [-1,1] to screen coordinates [0, width/height]
+        const screenX = (ndcX + 1.0) * 0.5 * this.canvas.clientWidth;
+        const screenY = (1.0 - ndcY) * 0.5 * this.canvas.clientHeight; // Flip Y
+
+        return vec3.fromValues(screenX, screenY, 0);
+    }
+
+    /**
+     * Get the axis direction for a widget
+     */
+    private getWidgetAxis(widgetId: number): vec3 {
+        switch (widgetId) {
+            case 1: return vec3.fromValues(1, 0, 0);  // +X
+            case 2: return vec3.fromValues(-1, 0, 0); // -X
+            case 3: return vec3.fromValues(0, 1, 0);  // +Y
+            case 4: return vec3.fromValues(0, -1, 0); // -Y
+            case 5: return vec3.fromValues(0, 0, 1);  // +Z
+            case 6: return vec3.fromValues(0, 0, -1); // -Z
+            default: return vec3.fromValues(0, 0, 0);
+        }
+    }
+
+    /**
+     * Get the world position of a widget (center of the face)
+     */
+    private getWidgetPosition(widgetId: number): vec3 {
+        const centerX = (this.cuttingCube.xmin + this.cuttingCube.xmax) / 2.0;
+        const centerY = (this.cuttingCube.ymin + this.cuttingCube.ymax) / 2.0;
+        const centerZ = (this.cuttingCube.zmin + this.cuttingCube.zmax) / 2.0;
+
+        switch (widgetId) {
+            case 1: return vec3.fromValues(this.cuttingCube.xmax, centerY, centerZ); // +X
+            case 2: return vec3.fromValues(this.cuttingCube.xmin, centerY, centerZ); // -X
+            case 3: return vec3.fromValues(centerX, this.cuttingCube.ymax, centerZ); // +Y
+            case 4: return vec3.fromValues(centerX, this.cuttingCube.ymin, centerZ); // -Y
+            case 5: return vec3.fromValues(centerX, centerY, this.cuttingCube.zmax); // +Z
+            case 6: return vec3.fromValues(centerX, centerY, this.cuttingCube.zmin); // -Z
+            default: return vec3.fromValues(0, 0, 0);
+        }
     }
 
     private handlePointerUp(): void {

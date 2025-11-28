@@ -225,7 +225,8 @@ const graphicsContext = new GraphicsContext("canvas",
       ctx.Canvas(),
       gPickingRenderTarget,
       gCuttingCube,
-      gMouseEventHandler
+      gMouseEventHandler,
+      gCamera
     );
 
     // Set selection callback to manage quality mode and selection state
