@@ -26,7 +26,7 @@ enum Pipeline_t {
   WindowLevel, CTF
 };
 let gCurrentPipelineType : Pipeline_t;
-
+let gCuttingCubeIsOn:boolean = true;
 const gMeshBufferManager:MeshBufferManager = new MeshBufferManager();
 const gCamera:Camera = new Camera();
 const gOffscreenRenderTarget = new OffscreenRenderTarget();
@@ -389,79 +389,83 @@ const graphicsContext = new GraphicsContext("canvas",
       let mesh = gMeshBufferManager.getMesh("cube")!;
       gCTFVolumeRenderPipeline?.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
     }
+    //I'll render the cutting cube only if the flag is on.
+    if(gCuttingCubeIsOn){
+      // Render the cutting cube
+      if (gCuttingCubePipeline && gCuttingCube) {
+        const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+        gCuttingCubePipeline.updateUniforms(viewProj, gCuttingCube.getModelMatrix());
+        let mesh = gMeshBufferManager.getMesh("cube")!;
+        gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
+      }
 
-    // Render the cutting cube
-    if (gCuttingCubePipeline && gCuttingCube) {
-      const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
-      gCuttingCubePipeline.updateUniforms(viewProj, gCuttingCube.getModelMatrix());
-      let mesh = gMeshBufferManager.getMesh("cube")!;
-      gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
+      // Render face widgets
+      if (gWidgetPipeline && gCuttingCube) {
+        const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+        const faceWidgets = gCuttingCube.getFaceWidgets();
+        const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
+
+        // Colors for each face widget (matching the cutting cube face colors)
+        const colors = [
+          [1.0, 0.0, 0.0, 1.0],  // +X (right) - Red
+          [0.0, 1.0, 1.0, 1.0],  // -X (left) - Cyan
+          [0.0, 1.0, 0.0, 1.0],  // +Y (top) - Green
+          [1.0, 0.0, 1.0, 1.0],  // -Y (bottom) - Magenta
+          [0.0, 0.0, 1.0, 1.0],  // +Z (front) - Blue
+          [1.0, 1.0, 0.0, 1.0],  // -Z (back) - Yellow
+        ];
+
+        // Render all widgets
+        faceWidgets.forEach((widget, index) => {
+          gWidgetPipeline!.renderWidget(
+            index,
+            viewProj,
+            widget.modelMatrix,
+            colors[index],
+            offscreenRenderPass,
+            widgetMesh.vertexBuffer,
+            widgetMesh.indexBuffer,
+            widgetMesh.indexCount
+          );
+        });
+      }
+
     }
-
-    // Render face widgets
-    if (gWidgetPipeline && gCuttingCube) {
-      const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
-      const faceWidgets = gCuttingCube.getFaceWidgets();
-      const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
-
-      // Colors for each face widget (matching the cutting cube face colors)
-      const colors = [
-        [1.0, 0.0, 0.0, 1.0],  // +X (right) - Red
-        [0.0, 1.0, 1.0, 1.0],  // -X (left) - Cyan
-        [0.0, 1.0, 0.0, 1.0],  // +Y (top) - Green
-        [1.0, 0.0, 1.0, 1.0],  // -Y (bottom) - Magenta
-        [0.0, 0.0, 1.0, 1.0],  // +Z (front) - Blue
-        [1.0, 1.0, 0.0, 1.0],  // -Z (back) - Yellow
-      ];
-
-      // Render all widgets
-      faceWidgets.forEach((widget, index) => {
-        gWidgetPipeline!.renderWidget(
-          index,
-          viewProj,
-          widget.modelMatrix,
-          colors[index],
-          offscreenRenderPass,
-          widgetMesh.vertexBuffer,
-          widgetMesh.indexBuffer,
-          widgetMesh.indexCount
-        );
-      });
-    }
-
     offscreenRenderPass.end();
+    //ATM i only care about picking if the cutting cube is on. In the future, when i pick more things,
+    //that'll change
+    if(gCuttingCubeIsOn){
+      // PICKING PASS: Render widgets to picking buffer
+      if (gPickingPipeline && gCuttingCube) {
+        const pickingPass = commandEncoder.beginRenderPass({
+          label: 'Picking Render Pass',
+          colorAttachments: [{
+            view: gPickingRenderTarget.getPickingTextureView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 0 }, // Clear to 0 (no object)
+            loadOp: 'clear',
+            storeOp: 'store',
+          }],
+        });
 
-    // PICKING PASS: Render widgets to picking buffer
-    if (gPickingPipeline && gCuttingCube) {
-      const pickingPass = commandEncoder.beginRenderPass({
-        label: 'Picking Render Pass',
-        colorAttachments: [{
-          view: gPickingRenderTarget.getPickingTextureView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 0 }, // Clear to 0 (no object)
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
+        const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+        const faceWidgets = gCuttingCube.getFaceWidgets();
+        const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
 
-      const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
-      const faceWidgets = gCuttingCube.getFaceWidgets();
-      const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
-
-      // Render each widget with its ID (1-6, 0 is background)
-      faceWidgets.forEach((widget, index) => {
-        gPickingPipeline!.renderObject(
-          index,           // Object index in pool
-          index + 1,       // Object ID (1-6)
-          viewProj,
-          widget.modelMatrix,
-          pickingPass,
-          widgetMesh.vertexBuffer,
-          widgetMesh.indexBuffer,
-          widgetMesh.indexCount
-        );
-      });
-
-      pickingPass.end();
+        // Render each widget with its ID (1-6, 0 is background)
+        faceWidgets.forEach((widget, index) => {
+          gPickingPipeline!.renderObject(
+            index,           // Object index in pool
+            index + 1,       // Object ID (1-6)
+            viewProj,
+            widget.modelMatrix,
+            pickingPass,
+            widgetMesh.vertexBuffer,
+            widgetMesh.indexBuffer,
+            widgetMesh.indexCount
+          );
+        });
+        pickingPass.end();
+      }
     }
 
     const screenPass = commandEncoder.beginRenderPass({
@@ -521,6 +525,16 @@ rootEventsTarget.addEventListener('pipeline-changed', (e:Event)=>{
   } else {
     gCurrentPipelineType = Pipeline_t.CTF;
   }
+  numberOfHQRenderings = 0;
+});
+//Handle the cutting cube button. When the button in tools is clicked it will trigger this event 
+//and this event will toggle the cube on/off. By toggling the cube on/off i mean the visualization
+//of the cube, not it's effects on the volume renderer.
+rootEventsTarget.addEventListener('toggle-cutting-cube', (e:Event)=>{
+  const {v} = (e as CustomEvent).detail;
+  const val = v as boolean;
+  console.log("toggling cutting cube");
+  gCuttingCubeIsOn = val;
   numberOfHQRenderings = 0;
 });
 

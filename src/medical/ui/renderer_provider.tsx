@@ -156,7 +156,14 @@ export const RendererProvider: React.FC<{children: React.ReactNode}> = ({ childr
       rootEventsTarget.removeEventListener('task-completed', endHandler);
     };
   }, []); // Empty deps = runs once on mount
-
+  //Cutting Cube control:
+  const toggleCuttingCube = (v:boolean)=>{
+    setCurrentCuttingCube(v);
+    rootEventsTarget.dispatchEvent(new CustomEvent('toggle-cutting-cube', {
+      detail:{v}
+    }));
+  }
+  const [usingCuttingCube, setCurrentCuttingCube] = useState(true);
   const contextValue: RendererContextType = {
     wlSettings,
     wlQualityProfiles,
@@ -164,6 +171,7 @@ export const RendererProvider: React.FC<{children: React.ReactNode}> = ({ childr
     ctfQualityProfiles,
     currentPipeline,
     huRange,
+    usingCuttingCube,
     doingTask, 
     updateWLSettings,
     updateWLQuality,
@@ -171,7 +179,9 @@ export const RendererProvider: React.FC<{children: React.ReactNode}> = ({ childr
     updateCTFQuality,
     setPipeline,
     setHURange,
-    toggleProgressBar
+    toggleProgressBar,
+    toggleCuttingCube
+
   };
 
   return (
