@@ -16,8 +16,8 @@ import { VolumeRenderPipelineCTF } from "./volume_raycast_pipeline_ctf";
 import { Root } from "./ui/root";
 import { rootEventsTarget } from "./ui/events";
 import { CuttingCube } from "../graphics/cuttingCube";
-import { CuttingCubePipeline } from "../graphics/cuttingCubePipeline";
 import { UnshadedColorPipeline } from "../graphics/unshadedColorPipeline";
+import { WireframePipeline } from "../graphics/wireframePipeline";
 import { PickingPipeline } from "../graphics/pickingPipeline";
 import { PickingRenderTarget } from "./picking_render_target";
 import { WidgetDragHandler } from "../graphics/widgetDragHandler";
@@ -33,9 +33,9 @@ const gOffscreenRenderTarget = new OffscreenRenderTarget();
 let gVolumeRenderPipeline: VolumeRenderPipeline|undefined = undefined;
 let gCTFVolumeRenderPipeline: VolumeRenderPipelineCTF|undefined = undefined;
 let gQuadRendererPipeline: FullscreenQuadPipeline|undefined = undefined;
-let gCuttingCubePipeline: CuttingCubePipeline|undefined = undefined;
 let gCuttingCube: CuttingCube|undefined = undefined;
 let gWidgetPipeline: UnshadedColorPipeline|undefined = undefined;
+let gWireframePipeline: WireframePipeline|undefined = undefined;
 let gPickingPipeline: PickingPipeline|undefined = undefined;
 let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
 let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
@@ -192,13 +192,14 @@ const graphicsContext = new GraphicsContext("canvas",
     //RENDERTARGET: Create a pipeline to draw the rendertarget
     gQuadRendererPipeline = new FullscreenQuadPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
     gQuadRendererPipeline.setTexture(gOffscreenRenderTarget.getColorTargetView());
-    //CUTTING CUBE: Create the cutting cube pipeline and instance
-    const cuttingCubeShaderCode = await fetch('shaders/cutting_cube.wgsl').then(r => r.text());
-    gCuttingCubePipeline = new CuttingCubePipeline(ctx, cuttingCubeShaderCode, navigator.gpu.getPreferredCanvasFormat());
+    //CUTTING CUBE: Create the cutting cube instance (rendered with wireframe pipeline)
     gCuttingCube = new CuttingCube(-0.5, 0.5, -0.5, 0.5, -0.5, 0.5); // Start with a smaller cube
     //WIDGETS: Create the unshaded color pipeline for face widgets
     const widgetShaderCode = await fetch('shaders/unshaded_color.wgsl').then(r => r.text());
     gWidgetPipeline = new UnshadedColorPipeline(ctx, widgetShaderCode, navigator.gpu.getPreferredCanvasFormat());
+    //WIREFRAME: Create the wireframe pipeline for cutting cube and widget outlines
+    const wireframeShaderCode = await fetch('shaders/wireframe.wgsl').then(r => r.text());
+    gWireframePipeline = new WireframePipeline(ctx, wireframeShaderCode, navigator.gpu.getPreferredCanvasFormat());
     //PICKING: Create the picking pipeline and render target
     const pickingShaderCode = await fetch('shaders/picking.wgsl').then(r => r.text());
     gPickingPipeline = new PickingPipeline(ctx, pickingShaderCode);
@@ -391,45 +392,101 @@ const graphicsContext = new GraphicsContext("canvas",
     }
     //I'll render the cutting cube only if the flag is on.
     if(gCuttingCubeIsOn){
-      // Render the cutting cube
-      if (gCuttingCubePipeline && gCuttingCube) {
+      // Render the cutting cube as wireframe (opaque white)
+      // RENDERING STRATEGY: Cutting cube is now rendered only as wireframe for better visibility
+      // No translucent faces - wireframe edges are much clearer for understanding cube bounds
+      if (gWireframePipeline && gCuttingCube) {
         const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
-        gCuttingCubePipeline.updateUniforms(viewProj, gCuttingCube.getModelMatrix());
         let mesh = gMeshBufferManager.getMesh("cube")!;
-        gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
+        const whiteColor = [1.0, 1.0, 1.0, 1.0]; // Opaque white wireframe
+        gWireframePipeline.renderWireframe(
+          0,                           // Object index 0 for cutting cube
+          viewProj,
+          gCuttingCube.getModelMatrix(),
+          whiteColor,
+          offscreenRenderPass,
+          mesh.vertexBuffer,
+          mesh.indexBuffer,
+          mesh.indexCount
+        );
       }
 
-      // Render face widgets
-      if (gWidgetPipeline && gCuttingCube) {
+      // Render face widgets with new visualization strategy
+      // RENDERING STRATEGY:
+      // - Unselected widgets: wireframe (opaque, colored) + solid (translucent, ~15% opacity)
+      //   This provides clear outline + subtle hint of widget volume
+      // - Selected widget: solid only (opaque, colored)
+      //   Clear visual feedback that this widget is being manipulated
+      if (gWidgetPipeline && gWireframePipeline && gCuttingCube && gWidgetDragHandler) {
         const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
         const faceWidgets = gCuttingCube.getFaceWidgets();
         const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
+        const selectedWidgetId = gWidgetDragHandler.getSelectedWidgetId(); // null if none selected
 
-        // Colors for each face widget (matching the cutting cube face colors)
-        const colors = [
-          [1.0, 0.0, 0.0, 1.0],  // +X (right) - Red
-          [0.0, 1.0, 1.0, 1.0],  // -X (left) - Cyan
-          [0.0, 1.0, 0.0, 1.0],  // +Y (top) - Green
-          [1.0, 0.0, 1.0, 1.0],  // -Y (bottom) - Magenta
-          [0.0, 0.0, 1.0, 1.0],  // +Z (front) - Blue
-          [1.0, 1.0, 0.0, 1.0],  // -Z (back) - Yellow
+        // Colors for each face widget (RGB channels stay same, alpha varies)
+        // Widget IDs are 1-based (1-6), but array is 0-based
+        const baseColors = [
+          [1.0, 0.0, 0.0],  // +X (right) - Red
+          [0.0, 1.0, 1.0],  // -X (left) - Cyan
+          [0.0, 1.0, 0.0],  // +Y (top) - Green
+          [1.0, 0.0, 1.0],  // -Y (bottom) - Magenta
+          [0.0, 0.0, 1.0],  // +Z (front) - Blue
+          [1.0, 1.0, 0.0],  // -Z (back) - Yellow
         ];
 
-        // Render all widgets
         faceWidgets.forEach((widget, index) => {
-          gWidgetPipeline!.renderWidget(
-            index,
-            viewProj,
-            widget.modelMatrix,
-            colors[index],
-            offscreenRenderPass,
-            widgetMesh.vertexBuffer,
-            widgetMesh.indexBuffer,
-            widgetMesh.indexCount
-          );
+          const widgetId = index + 1; // Convert 0-based index to 1-based ID
+          const isSelected = (widgetId === selectedWidgetId);
+          const [r, g, b] = baseColors[index];
+
+          if (isSelected) {
+            // SELECTED WIDGET: Render only as opaque solid
+            // Provides clear feedback that this widget is actively being dragged
+            const opaqueColor = [r, g, b, 1.0];
+            gWidgetPipeline!.renderWidget(
+              index,
+              viewProj,
+              widget.modelMatrix,
+              opaqueColor,
+              offscreenRenderPass,
+              widgetMesh.vertexBuffer,
+              widgetMesh.indexBuffer,
+              widgetMesh.indexCount
+            );
+          } else {
+            // UNSELECTED WIDGET: Render twice for layered effect
+
+            // 1. First pass: Opaque wireframe outline
+            //    Provides clear edge definition regardless of viewing angle
+            const opaqueWireframeColor = [r, g, b, 1.0];
+            gWireframePipeline!.renderWireframe(
+              index + 1,  // Object indices 1-6 for widgets (0 is cutting cube)
+              viewProj,
+              widget.modelMatrix,
+              opaqueWireframeColor,
+              offscreenRenderPass,
+              widgetMesh.vertexBuffer,
+              widgetMesh.indexBuffer,
+              widgetMesh.indexCount
+            );
+
+            // 2. Second pass: Translucent solid fill
+            //    Subtle hint of widget volume without obscuring the volume data
+            //    Alpha = 0.15 provides just enough visibility without being distracting
+            const translucentColor = [r, g, b, 0.15];
+            gWidgetPipeline!.renderWidget(
+              index,
+              viewProj,
+              widget.modelMatrix,
+              translucentColor,
+              offscreenRenderPass,
+              widgetMesh.vertexBuffer,
+              widgetMesh.indexBuffer,
+              widgetMesh.indexCount
+            );
+          }
         });
       }
-
     }
     offscreenRenderPass.end();
     //ATM i only care about picking if the cutting cube is on. In the future, when i pick more things,
