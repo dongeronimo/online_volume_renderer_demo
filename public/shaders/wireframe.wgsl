@@ -84,18 +84,23 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // DEBUG: Visualize barycentric coordinates as RGB
-    // This will help us see if barycentrics are being calculated correctly
-    // If all triangles show the same color gradient, barycentrics are working
-    // If everything is solid color, barycentrics are broken
-    return vec4<f32>(input.barycentric, 1.0);
+    // Calculate distance to nearest edge
+    // The GPU has linearly interpolated our barycentric coordinates across the triangle
+    // The minimum component tells us the distance to the nearest edge in barycentric space
+    let edge_dist = min(min(input.barycentric.x, input.barycentric.y), input.barycentric.z);
 
-    // ORIGINAL CODE (commented out for debugging):
-    // // Calculate distance to nearest edge
-    // let edge_dist = min(min(input.barycentric.x, input.barycentric.y), input.barycentric.z);
-    // let thickness = 0.015;
-    // if (edge_dist > thickness) {
-    //     discard;
-    // }
-    // return uniforms.color;
+    // Define wireframe line thickness
+    // TUNING: Using thicker lines (0.1) to ensure visibility
+    // Barycentric values range from 0 (at edge) to ~0.33 (at center of triangle)
+    // A threshold of 0.1 means we keep pixels where min component < 0.1
+    let thickness = 0.1;
+
+    // Discard fragments that are too far from any edge
+    // This creates the wireframe effect by only rendering near edges
+    if (edge_dist > thickness) {
+        discard;
+    }
+
+    // Render the wireframe line with the specified color
+    return uniforms.color;
 }
