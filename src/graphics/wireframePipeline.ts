@@ -172,12 +172,19 @@ export class WireframePipeline {
 
         const resources = this.resourcePool[objectIndex];
 
+        // DEBUG: Log the color being set
+        console.log(`[Wireframe ${objectIndex}] Color:`, color);
+
         // Update uniform buffer
         // Layout matches shader: viewProjection (mat4) + model (mat4) + color (vec4)
         const data = new Float32Array(36); // 16 + 16 + 4 = 36 floats
         data.set(viewProjection, 0);       // Offset 0: mat4x4<f32> (16 floats)
         data.set(model, 16);                // Offset 16: mat4x4<f32> (16 floats)
         data.set(color, 32);                // Offset 32: vec4<f32> (4 floats)
+
+        // DEBUG: Verify color was written correctly
+        console.log(`[Wireframe ${objectIndex}] Buffer color:`, data[32], data[33], data[34], data[35]);
+
         this.device.queue.writeBuffer(resources.uniformBuffer, 0, data.buffer);
 
         // Issue draw call
