@@ -136,8 +136,8 @@ export class WireframePipeline {
                 frontFace: 'ccw',
             },
             depthStencil: {
-                depthWriteEnabled: true,  // Write depth for proper occlusion
-                depthCompare: 'less',      // Standard depth test
+                depthWriteEnabled: false,  // Don't write depth - render on top like widgets
+                depthCompare: 'always',     // Always pass depth test to overlay on geometry
                 format: 'depth24plus',
             },
         });
