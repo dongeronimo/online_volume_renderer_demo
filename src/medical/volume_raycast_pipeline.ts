@@ -186,7 +186,7 @@ export class VolumeRenderPipeline {
         cullMode: 'none',
       },
       depthStencil: {
-        depthWriteEnabled: true,
+        depthWriteEnabled: false,  // Volume rendering doesn't have meaningful depth
         depthCompare: 'greater',
         format: 'depth24plus',
       },
