@@ -91,20 +91,10 @@ export class WireframePipeline {
                         {
                             shaderLocation: 0,
                             offset: 0,
-                            format: 'float32x3', // position
+                            format: 'float32x3', // position - only attribute used by wireframe shader
                         },
-                        // NOTE: Wireframe shader doesn't use normal or uv, but we keep
-                        // the vertex format compatible with our standard meshes
-                        {
-                            shaderLocation: 1,
-                            offset: 12,
-                            format: 'float32x3', // normal (unused)
-                        },
-                        {
-                            shaderLocation: 2,
-                            offset: 24,
-                            format: 'float32x2', // uv (unused)
-                        },
+                        // NOTE: Shader only uses position, but vertex buffer contains normal+uv
+                        // We skip declaring them as attributes since shader doesn't need them
                     ],
                 }],
             },
@@ -131,9 +121,8 @@ export class WireframePipeline {
                 }],
             },
             primitive: {
-                topology: 'triangle-list',
-                cullMode: 'back',
-                frontFace: 'ccw',
+                topology: 'line-list',  // Use line-list for wireframe rendering with edge indices
+                // Note: cullMode and frontFace are not applicable for line topology
             },
             depthStencil: {
                 depthWriteEnabled: false,  // Don't write depth - render on top like widgets
@@ -144,7 +133,7 @@ export class WireframePipeline {
     }
 
     /**
-     * Render an object with wireframe
+     * Render an object with wireframe using line-list topology
      *
      * @param objectIndex Index for resource pooling (0 = cutting cube, 1-6 = widgets)
      * @param viewProjection Combined view-projection matrix
@@ -152,8 +141,8 @@ export class WireframePipeline {
      * @param color Wireframe line color (RGBA, alpha supported)
      * @param passEncoder Render pass encoder
      * @param vertexBuffer Mesh vertex buffer
-     * @param indexBuffer Mesh index buffer (triangle indices)
-     * @param indexCount Number of indices to draw
+     * @param edgeIndexBuffer Edge index buffer (pairs of vertices for line-list)
+     * @param edgeCount Number of edge indices (not edges - this is indices, so 2x number of lines)
      */
     public renderWireframe(
         objectIndex: number,
@@ -162,8 +151,8 @@ export class WireframePipeline {
         color: vec4,
         passEncoder: GPURenderPassEncoder,
         vertexBuffer: GPUBuffer,
-        indexBuffer: GPUBuffer,
-        indexCount: number
+        edgeIndexBuffer: GPUBuffer,
+        edgeCount: number
     ): void {
         if (objectIndex < 0 || objectIndex >= this.maxObjects) {
             console.error(`Wireframe object index ${objectIndex} out of range [0, ${this.maxObjects})`);
@@ -172,9 +161,6 @@ export class WireframePipeline {
 
         const resources = this.resourcePool[objectIndex];
 
-        // DEBUG: Log the color being set
-        console.log(`[Wireframe ${objectIndex}] Color:`, color);
-
         // Update uniform buffer
         // Layout matches shader: viewProjection (mat4) + model (mat4) + color (vec4)
         const data = new Float32Array(36); // 16 + 16 + 4 = 36 floats
@@ -182,16 +168,13 @@ export class WireframePipeline {
         data.set(model, 16);                // Offset 16: mat4x4<f32> (16 floats)
         data.set(color, 32);                // Offset 32: vec4<f32> (4 floats)
 
-        // DEBUG: Verify color was written correctly
-        console.log(`[Wireframe ${objectIndex}] Buffer color:`, data[32], data[33], data[34], data[35]);
-
         this.device.queue.writeBuffer(resources.uniformBuffer, 0, data.buffer);
 
-        // Issue draw call
+        // Issue draw call with edge indices for line-list rendering
         passEncoder.setPipeline(this.pipeline);
         passEncoder.setBindGroup(0, resources.bindGroup);
         passEncoder.setVertexBuffer(0, vertexBuffer);
-        passEncoder.setIndexBuffer(indexBuffer, 'uint16');
-        passEncoder.drawIndexed(indexCount);
+        passEncoder.setIndexBuffer(edgeIndexBuffer, 'uint16');
+        passEncoder.drawIndexed(edgeCount);
     }
 }

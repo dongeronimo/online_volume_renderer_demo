@@ -397,7 +397,7 @@ const graphicsContext = new GraphicsContext("canvas",
       // No translucent faces - wireframe edges are much clearer for understanding cube bounds
       if (gWireframePipeline && gCuttingCube) {
         const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
-        let mesh = gMeshBufferManager.getMesh("cube")!;
+        let mesh = gMeshBufferManager.getMesh("cube") as StaticMesh;
         const whiteColor = [1.0, 1.0, 1.0, 1.0]; // Opaque white wireframe
         gWireframePipeline.renderWireframe(
           0,                           // Object index 0 for cutting cube
@@ -406,8 +406,8 @@ const graphicsContext = new GraphicsContext("canvas",
           whiteColor,
           offscreenRenderPass,
           mesh.vertexBuffer,
-          mesh.indexBuffer,
-          mesh.indexCount
+          mesh.edgeIndexBuffer,        // Use edge indices for line-list rendering
+          mesh.edgeCount               // Number of edge indices (pairs of vertices)
         );
       }
 
@@ -420,7 +420,7 @@ const graphicsContext = new GraphicsContext("canvas",
       if (gWidgetPipeline && gWireframePipeline && gCuttingCube && gWidgetDragHandler) {
         const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
         const faceWidgets = gCuttingCube.getFaceWidgets();
-        const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
+        const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName()) as StaticMesh;
         const selectedWidgetId = gWidgetDragHandler.getSelectedWidgetId(); // null if none selected
 
         // Colors for each face widget (RGB channels stay same, alpha varies)
@@ -466,8 +466,8 @@ const graphicsContext = new GraphicsContext("canvas",
               opaqueWireframeColor,
               offscreenRenderPass,
               widgetMesh.vertexBuffer,
-              widgetMesh.indexBuffer,
-              widgetMesh.indexCount
+              widgetMesh.edgeIndexBuffer,  // Use edge indices for line-list rendering
+              widgetMesh.edgeCount         // Number of edge indices
             );
 
             // 2. Second pass: Translucent solid fill
