@@ -20,6 +20,7 @@ import { CuttingCubePipeline } from "../graphics/cuttingCubePipeline";
 import { UnshadedColorPipeline } from "../graphics/unshadedColorPipeline";
 import { PickingPipeline } from "../graphics/pickingPipeline";
 import { PickingRenderTarget } from "./picking_render_target";
+import { WidgetDragHandler } from "../graphics/widgetDragHandler";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -37,6 +38,9 @@ let gCuttingCube: CuttingCube|undefined = undefined;
 let gWidgetPipeline: UnshadedColorPipeline|undefined = undefined;
 let gPickingPipeline: PickingPipeline|undefined = undefined;
 let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
+let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
+let gSelectedWidgetId: number | null = null;
+let gFrameCount: number = 0; // For pulsing animation
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -216,23 +220,28 @@ const graphicsContext = new GraphicsContext("canvas",
         numberOfHQRenderings = 0;
       });
 
-    //PICKING: Set up click handler for object picking
-    ctx.Canvas().addEventListener('click', async (event) => {
-      const rect = ctx.Canvas().getBoundingClientRect();
-      const canvasX = event.clientX - rect.left;
-      const canvasY = event.clientY - rect.top;
+    // Set up widget drag handler
+    gWidgetDragHandler = new WidgetDragHandler(
+      ctx.Canvas(),
+      gPickingRenderTarget,
+      gCuttingCube,
+      gMouseEventHandler
+    );
 
-      // Scale coordinates to match picking buffer size
-      const scale = !usingHQ ? gOffscreenBufferScaleLQ : gOffscreenBufferScaleHQ;
-      const pickX = Math.floor(canvasX * scale);
-      const pickY = Math.floor(canvasY * scale);
-
-      // Read the object ID at the clicked pixel
-      const objectId = await gPickingRenderTarget.readPixel(pickX, pickY);
-
-      if (objectId > 0) {
+    // Set selection callback to manage quality mode and selection state
+    gWidgetDragHandler.setSelectionCallback((widgetId: number | null) => {
+      gSelectedWidgetId = widgetId;
+      if (widgetId !== null) {
+        // Widget selected - switch to LQ mode
+        usingHQ = false;
+        numberOfHQRenderings = 0;
         const faceNames = ['+X (Red)', '-X (Cyan)', '+Y (Green)', '-Y (Magenta)', '+Z (Blue)', '-Z (Yellow)'];
-        console.log(`Clicked on face widget ${objectId}: ${faceNames[objectId - 1]}`);
+        console.log(`Selected face widget ${widgetId}: ${faceNames[widgetId - 1]}`);
+      } else {
+        // Widget deselected - switch to HQ mode
+        usingHQ = true;
+        numberOfHQRenderings = 0;
+        console.log('Widget deselected');
       }
     });
     //set up min and max
@@ -391,7 +400,7 @@ const graphicsContext = new GraphicsContext("canvas",
       gCuttingCubePipeline.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
     }
 
-    // Render face widgets
+    // Render face widgets (with glow effect for selected widget)
     if (gWidgetPipeline && gCuttingCube) {
       const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
       const faceWidgets = gCuttingCube.getFaceWidgets();
@@ -407,6 +416,42 @@ const graphicsContext = new GraphicsContext("canvas",
         [1.0, 1.0, 0.0, 1.0],  // -Z (back) - Yellow
       ];
 
+      // Render glow for selected widget first (if any)
+      if (gSelectedWidgetId !== null && gSelectedWidgetId >= 1 && gSelectedWidgetId <= 6) {
+        const selectedIndex = gSelectedWidgetId - 1;
+        const selectedWidget = faceWidgets[selectedIndex];
+
+        // Calculate pulsing scale
+        const pulseSpeed = 4.0;
+        const pulseAmount = 0.1;
+        const pulse = 1.0 + pulseAmount * Math.sin(gFrameCount * 0.016 * pulseSpeed); // 0.016 ≈ 1/60
+
+        // Create scaled model matrix for glow
+        const glowScale = 1.2 * pulse;
+        const glowMatrix = mat4.create();
+        mat4.copy(glowMatrix, selectedWidget.modelMatrix);
+        // Extract translation, scale by glow amount, reapply
+        const translation = vec3.create();
+        mat4.getTranslation(translation, glowMatrix);
+        mat4.identity(glowMatrix);
+        mat4.translate(glowMatrix, glowMatrix, translation);
+        mat4.scale(glowMatrix, glowMatrix, vec3.fromValues(glowScale, glowScale, glowScale));
+
+        // Render glow (bright white/color with transparency)
+        const glowColor = [1.0, 1.0, 1.0, 0.4]; // Bright white glow
+        gWidgetPipeline!.renderWidget(
+          selectedIndex,
+          viewProj,
+          glowMatrix,
+          glowColor,
+          offscreenRenderPass,
+          widgetMesh.vertexBuffer,
+          widgetMesh.indexBuffer,
+          widgetMesh.indexCount
+        );
+      }
+
+      // Render all widgets normally
       faceWidgets.forEach((widget, index) => {
         gWidgetPipeline!.renderWidget(
           index,
@@ -420,6 +465,9 @@ const graphicsContext = new GraphicsContext("canvas",
         );
       });
     }
+
+    // Increment frame counter for animation
+    gFrameCount++;
 
     offscreenRenderPass.end();
 
