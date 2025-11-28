@@ -18,6 +18,7 @@ export interface RendererContextType {
   // HU range (loaded async)
   huRange: { min: number; max: number } | null; // null until loaded
   
+  usingCuttingCube: boolean;
   doingTask:boolean;
   // Update functions
   updateWLSettings: (updates: Partial<WindowLevelRenderSettings>) => void;
@@ -27,4 +28,5 @@ export interface RendererContextType {
   setPipeline: (pipeline: "wl" | "ctf") => void;
   setHURange: (min: number, max: number) => void;
   toggleProgressBar:(val:boolean)=>void;
+  toggleCuttingCube:(val: boolean)=>void;
 }

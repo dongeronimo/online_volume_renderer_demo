@@ -54,7 +54,11 @@ export class StaticMesh {
     public indexBuffer: GPUBuffer;
     public indexCount: number;
     public indexFormat: GPUIndexFormat;
-    
+
+    // Wireframe rendering: edge indices for line-list topology
+    public edgeIndexBuffer: GPUBuffer;
+    public edgeCount: number;
+
     constructor(device: GPUDevice, vertices: Float32Array, indices: Uint16Array | Uint32Array) {
         // Create vertex buffer
         this.vertexBuffer = device.createBuffer({
@@ -63,11 +67,11 @@ export class StaticMesh {
             usage: GPUBufferUsage.VERTEX,
             mappedAtCreation: true,  // Map for initial upload
         });
-        
+
         // Upload vertex data
         new Float32Array(this.vertexBuffer.getMappedRange()).set(vertices);
         this.vertexBuffer.unmap();  // Unmap after upload
-        
+
         // Create index buffer
         this.indexBuffer = device.createBuffer({
             label: 'Index Buffer',
@@ -75,7 +79,7 @@ export class StaticMesh {
             usage: GPUBufferUsage.INDEX,
             mappedAtCreation: true,
         });
-        
+
         // Upload index data (handle both Uint16/Uint32)
         if (indices instanceof Uint16Array) {
             new Uint16Array(this.indexBuffer.getMappedRange()).set(indices);
@@ -85,15 +89,81 @@ export class StaticMesh {
             this.indexFormat = 'uint32';
         }
         this.indexBuffer.unmap();
-        
+
         this.indexCount = indices.length;
+
+        // Generate edge indices for wireframe rendering
+        // Extract unique edges from triangle indices for line-list rendering
+        const edgeIndices = this.generateEdgeIndices(indices);
+
+        this.edgeIndexBuffer = device.createBuffer({
+            label: 'Edge Index Buffer',
+            size: edgeIndices.byteLength,
+            usage: GPUBufferUsage.INDEX,
+            mappedAtCreation: true,
+        });
+
+        // Upload edge index data
+        if (indices instanceof Uint16Array) {
+            new Uint16Array(this.edgeIndexBuffer.getMappedRange()).set(edgeIndices);
+        } else {
+            new Uint32Array(this.edgeIndexBuffer.getMappedRange()).set(edgeIndices);
+        }
+        this.edgeIndexBuffer.unmap();
+
+        this.edgeCount = edgeIndices.length;
     }
+
+    /**
+     * Generate edge indices from triangle indices for wireframe rendering
+     * Extracts unique edges and returns them as pairs for line-list topology
+     *
+     * Algorithm:
+     * - For each triangle [v0, v1, v2], extract edges [v0,v1], [v1,v2], [v2,v0]
+     * - Deduplicate edges (treat [a,b] same as [b,a])
+     * - Return as flat array: [v0, v1, v2, v3, ...] for line-list rendering
+     */
+    private generateEdgeIndices(indices: Uint16Array | Uint32Array): Uint16Array | Uint32Array {
+        const edgeSet = new Set<string>();
+        const edges: number[] = [];
+
+        // Process triangles (every 3 indices = 1 triangle)
+        for (let i = 0; i < indices.length; i += 3) {
+            const v0 = indices[i];
+            const v1 = indices[i + 1];
+            const v2 = indices[i + 2];
+
+            // Three edges per triangle
+            const triangleEdges = [
+                [v0, v1],
+                [v1, v2],
+                [v2, v0]
+            ];
+
+            for (const [a, b] of triangleEdges) {
+                // Create canonical edge key (smaller index first to deduplicate)
+                const key = a < b ? `${a},${b}` : `${b},${a}`;
+
+                if (!edgeSet.has(key)) {
+                    edgeSet.add(key);
+                    // Add edge as [a, b] for line-list rendering
+                    edges.push(a, b);
+                }
+            }
+        }
+
+        // Return same type as input indices
+        return indices instanceof Uint16Array
+            ? new Uint16Array(edges)
+            : new Uint32Array(edges);
+    }
+
     /**
      * Bind the vertex and index buffer in the current command encoder
-     * @param cmd 
+     * @param cmd
      */
     public bind(cmd:GPURenderPassEncoder){
-        cmd.setVertexBuffer(0, this.vertexBuffer);  
+        cmd.setVertexBuffer(0, this.vertexBuffer);
         cmd.setIndexBuffer(this.indexBuffer, this.indexFormat);
     }
 }
