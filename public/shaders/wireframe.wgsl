@@ -84,31 +84,18 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Calculate distance to nearest edge
-    // The GPU has linearly interpolated our barycentric coordinates across the triangle
-    // The minimum component tells us the distance to the nearest edge in barycentric space
-    //
-    // EXAMPLE:
-    // - At vertex 0 (1,0,0): min = 0 (on two edges)
-    // - At triangle center (~0.33, ~0.33, ~0.33): min = 0.33 (far from all edges)
-    // - Near edge between vertices 1 and 2: the first component approaches 0
-    let edge_dist = min(min(input.barycentric.x, input.barycentric.y), input.barycentric.z);
+    // DEBUG: Visualize barycentric coordinates as RGB
+    // This will help us see if barycentrics are being calculated correctly
+    // If all triangles show the same color gradient, barycentrics are working
+    // If everything is solid color, barycentrics are broken
+    return vec4<f32>(input.barycentric, 1.0);
 
-    // Define wireframe line thickness
-    // TUNING: Larger values = thicker lines
-    // PITFALL: This is in barycentric space, not pixels!
-    // - Small triangles will have thicker-looking lines
-    // - Large triangles will have thinner-looking lines
-    // - Lines get thinner as they recede into the distance
-    let thickness = 0.015;
-
-    // Discard fragments that are too far from any edge
-    // This creates the wireframe effect by only rendering near edges
-    if (edge_dist > thickness) {
-        discard;
-    }
-
-    // Render the wireframe line with the specified color
-    // Alpha channel is respected, so semi-transparent wireframes are possible
-    return uniforms.color;
+    // ORIGINAL CODE (commented out for debugging):
+    // // Calculate distance to nearest edge
+    // let edge_dist = min(min(input.barycentric.x, input.barycentric.y), input.barycentric.z);
+    // let thickness = 0.015;
+    // if (edge_dist > thickness) {
+    //     discard;
+    // }
+    // return uniforms.color;
 }
