@@ -45,9 +45,14 @@ export class VolumeRenderPipeline {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline;
   private bindGroup: GPUBindGroup;
+  private bindGroupLayout!: GPUBindGroupLayout;
   private uniformBuffer: GPUBuffer;
   private uniformData: Float32Array;
   private accelerationTexture: GPUTexture;
+  private volumeTextureView: GPUTextureView;
+  private gradientTextureView: GPUTextureView;
+  private sampler: GPUSampler;
+  private lassoMaskTextureView!: GPUTextureView;
 
   constructor(
     device: GPUDevice,
@@ -77,13 +82,20 @@ export class VolumeRenderPipeline {
       numChunksZ
     );
 
+    // Store texture views
+    this.volumeTextureView = volumeTexture.createView();
+    this.gradientTextureView = gradientTexture.createView();
+
     // Create sampler
-    const sampler = device.createSampler({
+    this.sampler = device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge',
     });
+
+    // Create dummy lasso mask texture (all visible)
+    this.lassoMaskTextureView = this.createDummyMaskTexture();
 
     // Create shader module
     const shaderModule = device.createShaderModule({
@@ -91,7 +103,7 @@ export class VolumeRenderPipeline {
     });
 
     // Create bind group layout
-    const bindGroupLayout = device.createBindGroupLayout({
+    this.bindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
           binding: 0,
@@ -126,25 +138,34 @@ export class VolumeRenderPipeline {
             sampleType: 'unfilterable-float',
             viewDimension: '3d'
           }
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {
+            sampleType: 'uint',
+            viewDimension: '3d'
+          }
         }
       ],
     });
 
     // Create bind group
     this.bindGroup = device.createBindGroup({
-      layout: bindGroupLayout,
+      layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.uniformBuffer } },
-        { binding: 1, resource: volumeTexture.createView() },
-        { binding: 2, resource: sampler },
-        { binding: 3, resource: gradientTexture.createView() },
-        { binding: 4, resource: this.accelerationTexture.createView() }
+        { binding: 1, resource: this.volumeTextureView },
+        { binding: 2, resource: this.sampler },
+        { binding: 3, resource: this.gradientTextureView },
+        { binding: 4, resource: this.accelerationTexture.createView() },
+        { binding: 5, resource: this.lassoMaskTextureView }
       ],
     });
 
     // Create pipeline layout
     const pipelineLayout = device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
+      bindGroupLayouts: [this.bindGroupLayout],
     });
 
     // Create render pipeline
@@ -309,5 +330,48 @@ export class VolumeRenderPipeline {
     passEncoder.setVertexBuffer(0, vertexBuffer);
     passEncoder.setIndexBuffer(indexBuffer, 'uint16');
     passEncoder.drawIndexed(indexCount);
+  }
+
+  /**
+   * Create a dummy 1x1x1 mask texture (all voxels visible)
+   */
+  private createDummyMaskTexture(): GPUTextureView {
+    const dummyTexture = this.device.createTexture({
+      size: { width: 1, height: 1, depthOrArrayLayers: 1 },
+      dimension: '3d',
+      format: 'r8uint',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      label: 'Dummy Lasso Mask'
+    });
+
+    // Fill with 1 (all visible)
+    this.device.queue.writeTexture(
+      { texture: dummyTexture },
+      new Uint8Array([1]),
+      { bytesPerRow: 1, rowsPerImage: 1 },
+      { width: 1, height: 1, depthOrArrayLayers: 1 }
+    );
+
+    return dummyTexture.createView();
+  }
+
+  /**
+   * Update the lasso mask texture (recreates bind group)
+   */
+  public setMaskTexture(maskTextureView: GPUTextureView): void {
+    this.lassoMaskTextureView = maskTextureView;
+
+    // Recreate bind group with new mask texture
+    this.bindGroup = this.device.createBindGroup({
+      layout: this.bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.uniformBuffer } },
+        { binding: 1, resource: this.volumeTextureView },
+        { binding: 2, resource: this.sampler },
+        { binding: 3, resource: this.gradientTextureView },
+        { binding: 4, resource: this.accelerationTexture.createView() },
+        { binding: 5, resource: this.lassoMaskTextureView }
+      ],
+    });
   }
 }

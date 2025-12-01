@@ -57,6 +57,7 @@ struct Uniforms {
 @group(0) @binding(2) var volumeSampler: sampler;
 @group(0) @binding(3) var gradientTexture: texture_2d_array<f32>;
 @group(0) @binding(4) var accelerationTexture: texture_3d<f32>;
+@group(0) @binding(5) var lassoMask: texture_3d<u32>;
 
 // ============================================================================
 // Vertex Shader
@@ -319,7 +320,21 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
       stepCount++;
       continue;
     }
-    
+
+    // LASSO: Check if voxel is masked by lasso contours
+    let voxelCoord = vec3<u32>(
+      u32(pos.x * f32(uniforms.volumeWidth - 1u)),
+      u32(pos.y * f32(uniforms.volumeHeight - 1u)),
+      u32(pos.z * f32(uniforms.volumeDepth - 1u))
+    );
+    let maskValue = textureLoad(lassoMask, voxelCoord, 0).r;
+    if (maskValue == 0u) {
+      // Voxel is masked (inside lasso contour) - skip this sample
+      t += uniforms.stepSize;
+      stepCount++;
+      continue;
+    }
+
     // Get current chunk
     let chunkIdx = getChunkIndex(pos);
     let chunkMinMax = sampleChunkMinMax(chunkIdx);
