@@ -130,6 +130,11 @@ export class LassoRenderPipeline {
         topology: 'line-strip',
         stripIndexFormat: undefined
       },
+      depthStencil: {
+        format: 'depth24plus',
+        depthWriteEnabled: false,  // Don't write to depth (draw on top)
+        depthCompare: 'always'     // Always pass depth test
+      },
       multisample: {
         count: 1
       },
