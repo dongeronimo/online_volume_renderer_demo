@@ -21,6 +21,9 @@ import { WireframePipeline } from "../graphics/wireframePipeline";
 import { PickingPipeline } from "../graphics/pickingPipeline";
 import { PickingRenderTarget } from "./picking_render_target";
 import { WidgetDragHandler } from "../graphics/widgetDragHandler";
+import { LassoManager } from "./lassoDrawing";
+import { LassoInputHandler } from "./lassoInputHandler";
+import { LassoRenderPipeline } from "./lassoRenderPipeline";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -39,6 +42,9 @@ let gWireframePipeline: WireframePipeline|undefined = undefined;
 let gPickingPipeline: PickingPipeline|undefined = undefined;
 let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
 let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
+let gLassoManager: LassoManager|undefined = undefined;
+let gLassoInputHandler: LassoInputHandler|undefined = undefined;
+let gLassoRenderPipeline: LassoRenderPipeline|undefined = undefined;
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -243,6 +249,56 @@ const graphicsContext = new GraphicsContext("canvas",
         console.log('Widget deselected');
       }
     });
+
+    // LASSO: Create lasso manager and input handler
+    gLassoManager = new LassoManager(64); // Max 64 contours
+    gLassoInputHandler = new LassoInputHandler(ctx.Canvas(), gLassoManager, gCamera);
+
+    // Set up lasso callbacks for camera lock/unlock
+    gLassoInputHandler.setCallbacks({
+      onDrawStart: () => {
+        // Lock camera controls while drawing
+        gMouseEventHandler?.setEnabled(false);
+        gWidgetDragHandler?.setEnabled(false);
+        console.log('🔒 Camera locked - drawing lasso');
+      },
+      onDrawEnd: () => {
+        // Unlock camera controls when done
+        gMouseEventHandler?.setEnabled(true);
+        gWidgetDragHandler?.setEnabled(true);
+        console.log('🔓 Camera unlocked - lasso complete');
+
+        // Trigger one HQ render to show final result
+        usingHQ = true;
+        numberOfHQRenderings = 0;
+      },
+      onPointsUpdate: (points) => {
+        // Update render pipeline with current points for real-time feedback
+        gLassoRenderPipeline?.updatePoints(points);
+
+        // Trigger render to show drawing progress
+        numberOfHQRenderings = 0;
+      }
+    });
+
+    // LASSO: Create render pipeline for drawing lasso
+    gLassoRenderPipeline = new LassoRenderPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
+    await gLassoRenderPipeline.initialize();
+
+    // LASSO: Set up 'L' key toggle for lasso mode
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'l' || e.key === 'L') {
+        const wasEnabled = gLassoInputHandler?.isEnabled() ?? false;
+        gLassoInputHandler?.setEnabled(!wasEnabled);
+
+        if (!wasEnabled) {
+          console.log('🎨 LASSO MODE ENABLED - Draw with left mouse button');
+        } else {
+          console.log('🎨 LASSO MODE DISABLED');
+        }
+      }
+    });
+
     //set up min and max
     gMinValue = parsed.huMin;
     gMaxValue = parsed.huMax;
@@ -488,6 +544,12 @@ const graphicsContext = new GraphicsContext("canvas",
         });
       }
     }
+
+    // LASSO: Render active lasso contour (if drawing)
+    if (gLassoRenderPipeline && gLassoInputHandler?.isCurrentlyDrawing()) {
+      gLassoRenderPipeline.render(offscreenRenderPass);
+    }
+
     offscreenRenderPass.end();
     //ATM i only care about picking if the cutting cube is on. In the future, when i pick more things,
     //that'll change
