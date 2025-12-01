@@ -286,6 +286,8 @@ export class LassoComputePipeline {
 
     let offset = 0;
 
+    console.log(`📦 Packing ${contours.length} contours for GPU...`);
+
     for (const contour of contours.slice(0, maxContours)) {
       const startOffset = offset;
 
@@ -293,6 +295,8 @@ export class LassoComputePipeline {
       const numPoints = Math.min(contour.points.length, MAX_POINTS_PER_CONTOUR);
       view.setUint32(offset, numPoints, true);
       offset += 4;
+
+      console.log(`  Contour: ${numPoints} points, camera=${contour.cameraPosition.map(v => v.toFixed(2)).join(',')}`);
 
       // cameraPosition: vec3<f32>
       view.setFloat32(offset + 0, contour.cameraPosition[0], true);
