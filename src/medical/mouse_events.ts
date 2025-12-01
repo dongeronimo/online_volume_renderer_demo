@@ -9,6 +9,11 @@ export default class RotateAround {
     private lastMouseY = 0;
     private distance = 2;
 
+    // Touch tracking
+    private lastTouchDistance = 0;
+    private lastTouchX = 0;
+    private lastTouchY = 0;
+
     // Track camera orientation and up vector
     private orientation = quat.create();
     private currentUp = vec3.fromValues(0, 1, 0);
@@ -88,6 +93,100 @@ export default class RotateAround {
             this.distance = Math.max(0.5, Math.min(20, this.distance));
             this.updateCamera();
             onEndMovement();
+        });
+
+        // Touch event listeners
+        canvas.addEventListener('touchstart', (e) => {
+            if (!this.enabled) return;
+
+            if (e.touches.length === 1) {
+                // Single touch - rotate
+                this.isRotating = true;
+                const touch = e.touches[0];
+                this.lastTouchX = touch.clientX;
+                this.lastTouchY = touch.clientY;
+                onBeginMovement();
+                e.preventDefault();
+            } else if (e.touches.length === 2) {
+                // Two touches - pan and zoom
+                this.isPanning = true;
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+
+                // Calculate center point for panning
+                this.lastTouchX = (touch1.clientX + touch2.clientX) / 2;
+                this.lastTouchY = (touch1.clientY + touch2.clientY) / 2;
+
+                // Calculate distance for pinch zoom
+                const dx = touch2.clientX - touch1.clientX;
+                const dy = touch2.clientY - touch1.clientY;
+                this.lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
+
+                onBeginMovement();
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!this.enabled) return;
+
+            if (e.touches.length === 1 && this.isRotating) {
+                // Single touch - rotate
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - this.lastTouchX;
+                const deltaY = touch.clientY - this.lastTouchY;
+
+                this.handleRotate(deltaX, deltaY);
+
+                this.lastTouchX = touch.clientX;
+                this.lastTouchY = touch.clientY;
+                e.preventDefault();
+            } else if (e.touches.length === 2 && this.isPanning) {
+                // Two touches - pan and zoom
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+
+                // Calculate current center point
+                const currentX = (touch1.clientX + touch2.clientX) / 2;
+                const currentY = (touch1.clientY + touch2.clientY) / 2;
+
+                // Pan based on center point movement
+                const deltaX = currentX - this.lastTouchX;
+                const deltaY = currentY - this.lastTouchY;
+                this.handlePan(deltaX, deltaY);
+
+                // Calculate current distance for pinch zoom
+                const dx = touch2.clientX - touch1.clientX;
+                const dy = touch2.clientY - touch1.clientY;
+                const currentDistance = Math.sqrt(dx * dx + dy * dy);
+
+                // Zoom based on pinch
+                const distanceDelta = currentDistance - this.lastTouchDistance;
+                this.distance -= distanceDelta * 0.01;
+                this.distance = Math.max(0.5, Math.min(20, this.distance));
+                this.updateCamera();
+
+                this.lastTouchX = currentX;
+                this.lastTouchY = currentY;
+                this.lastTouchDistance = currentDistance;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', () => {
+            if (this.isRotating || this.isPanning) {
+                this.isRotating = false;
+                this.isPanning = false;
+                onEndMovement();
+            }
+        });
+
+        canvas.addEventListener('touchcancel', () => {
+            if (this.isRotating || this.isPanning) {
+                this.isRotating = false;
+                this.isPanning = false;
+                onEndMovement();
+            }
         });
     }
     
