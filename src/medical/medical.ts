@@ -274,24 +274,36 @@ const graphicsContext = new GraphicsContext("canvas",
         if (gLassoManager && gLassoManager.getContourCount() > 0 && gLassoComputePipeline) {
           console.log('🔄 Computing lasso mask...');
 
+          // Force LQ mode during computation to keep render loop running
+          // This allows progressive updates and prevents hanging in HQ mode
+          const wasUsingHQ = usingHQ;
+          usingHQ = false;
+          numberOfHQRenderings = 0;
+
           const contours = gLassoManager.getActiveContours();
           const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
 
-          await gLassoComputePipeline.computeMask(
-            contours,
-            modelMatrix,
-            (current, total) => {
-              console.log(`  📊 Progress: ${current}/${total} chunks (${Math.round(current / total * 100)}%)`);
-            }
-          );
+          try {
+            await gLassoComputePipeline.computeMask(
+              contours,
+              modelMatrix,
+              (current, total) => {
+                console.log(`  📊 Progress: ${current}/${total} chunks (${Math.round(current / total * 100)}%)`);
+              }
+            );
 
-          // Update mask texture in volume pipelines
-          gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
-          gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+            // Update mask texture in volume pipelines
+            gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+            gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
 
-          gLassoManager.markClean();
+            gLassoManager.markClean();
 
-          console.log('✓ Lasso mask applied to volume');
+            console.log('✓ Lasso mask applied to volume');
+          } finally {
+            // Restore HQ mode setting
+            usingHQ = wasUsingHQ;
+            numberOfHQRenderings = 0;
+          }
         }
 
         // Trigger one HQ render to show final result

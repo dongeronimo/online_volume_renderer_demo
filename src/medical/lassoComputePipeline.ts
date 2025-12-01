@@ -233,19 +233,15 @@ export class LassoComputePipeline {
       // Submit this chunk
       this.device.queue.submit([commandEncoder.finish()]);
 
+      // Wait for this chunk to complete before starting next
+      // This prevents GPU queue overflow and allows browser to remain responsive
+      await this.device.queue.onSubmittedWorkDone();
+
       // Report progress
       if (onProgress) {
         onProgress(chunkIndex + 1, numChunks);
       }
-
-      // Yield to browser between chunks (except on last chunk)
-      if (chunkIndex < numChunks - 1) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
     }
-
-    // Wait for final chunk to complete
-    await this.device.queue.onSubmittedWorkDone();
 
     const endTime = performance.now();
     console.log(`✓ Lasso mask computed in ${(endTime - startTime).toFixed(2)}ms (${contours.length} contours, ${numChunks} chunks, ${workgroupsX}×${workgroupsY}×${totalWorkgroupsZ} total workgroups)`);
