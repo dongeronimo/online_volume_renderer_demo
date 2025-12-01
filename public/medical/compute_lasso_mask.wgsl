@@ -104,7 +104,7 @@ fn isVoxelMasked(worldPos: vec3<f32>) -> bool {
   return false; // Not inside any contour = visible
 }
 
-@compute @workgroup_size(8, 8, 8)
+@compute @workgroup_size(8, 4, 4)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Bounds check
   if (gid.x >= params.volumeWidth ||

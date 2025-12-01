@@ -199,10 +199,10 @@ export class LassoComputePipeline {
     computePass.setPipeline(this.pipeline);
     computePass.setBindGroup(0, this.bindGroup);
 
-    // Dispatch compute shader (8×8×8 workgroup size)
+    // Dispatch compute shader (8×4×4 workgroup size = 128 invocations)
     const workgroupsX = Math.ceil(this.volumeWidth / 8);
-    const workgroupsY = Math.ceil(this.volumeHeight / 8);
-    const workgroupsZ = Math.ceil(this.volumeDepth / 8);
+    const workgroupsY = Math.ceil(this.volumeHeight / 4);
+    const workgroupsZ = Math.ceil(this.volumeDepth / 4);
 
     computePass.dispatchWorkgroups(workgroupsX, workgroupsY, workgroupsZ);
     computePass.end();
