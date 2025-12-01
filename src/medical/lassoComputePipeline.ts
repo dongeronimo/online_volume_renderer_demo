@@ -72,7 +72,7 @@ export class LassoComputePipeline {
 
     this.maskTextureView = this.maskTexture.createView({
       dimension: '3d',
-      label: 'Lasso Mask Texture View'
+      label: 'Lasso Mask View (3D)'
     });
 
     console.log(`Created lasso mask texture: ${this.volumeWidth}×${this.volumeHeight}×${this.volumeDepth} = ${

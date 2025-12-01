@@ -24,6 +24,7 @@ import { WidgetDragHandler } from "../graphics/widgetDragHandler";
 import { LassoManager } from "./lassoDrawing";
 import { LassoInputHandler } from "./lassoInputHandler";
 import { LassoRenderPipeline } from "./lassoRenderPipeline";
+import { LassoComputePipeline } from "./lassoComputePipeline";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -45,6 +46,7 @@ let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
 let gLassoManager: LassoManager|undefined = undefined;
 let gLassoInputHandler: LassoInputHandler|undefined = undefined;
 let gLassoRenderPipeline: LassoRenderPipeline|undefined = undefined;
+let gLassoComputePipeline: LassoComputePipeline|undefined = undefined;
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -262,11 +264,29 @@ const graphicsContext = new GraphicsContext("canvas",
         gWidgetDragHandler?.setEnabled(false);
         console.log('🔒 Camera locked - drawing lasso');
       },
-      onDrawEnd: () => {
+      onDrawEnd: async () => {
         // Unlock camera controls when done
         gMouseEventHandler?.setEnabled(true);
         gWidgetDragHandler?.setEnabled(true);
         console.log('🔓 Camera unlocked - lasso complete');
+
+        // Compute mask if lasso manager has contours
+        if (gLassoManager && gLassoManager.getContourCount() > 0 && gLassoComputePipeline) {
+          console.log('🔄 Computing lasso mask...');
+
+          const contours = gLassoManager.getActiveContours();
+          const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
+
+          await gLassoComputePipeline.computeMask(contours, modelMatrix);
+
+          // Update mask texture in volume pipelines
+          gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+          gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+
+          gLassoManager.markClean();
+
+          console.log('✓ Lasso mask applied to volume');
+        }
 
         // Trigger one HQ render to show final result
         usingHQ = true;
@@ -284,6 +304,21 @@ const graphicsContext = new GraphicsContext("canvas",
     // LASSO: Create render pipeline for drawing lasso
     gLassoRenderPipeline = new LassoRenderPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
     await gLassoRenderPipeline.initialize();
+
+    // LASSO: Create compute pipeline for mask generation
+    gLassoComputePipeline = new LassoComputePipeline(ctx.Device());
+    await gLassoComputePipeline.initialize(
+      parsed.width,
+      parsed.height,
+      parsed.numSlices
+    );
+
+    // Initialize with empty mask (all visible)
+    await gLassoComputePipeline.clearMask();
+
+    // Bind mask texture to volume pipelines
+    gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+    gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
 
     // LASSO: Set up 'L' key toggle for lasso mode
     window.addEventListener('keydown', (e) => {
