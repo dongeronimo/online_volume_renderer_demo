@@ -26,7 +26,7 @@ struct ComputeParams {
 
 @group(0) @binding(0) var<storage, read> contours: array<ContourData>;
 @group(0) @binding(1) var<uniform> params: ComputeParams;
-@group(0) @binding(2) var outputMask: texture_storage_3d<r8uint, write>;
+@group(0) @binding(2) var outputMask: texture_storage_3d<r32uint, write>;
 
 // Convert voxel index to world position
 fn voxelToWorld(voxelIndex: vec3<u32>) -> vec3<f32> {

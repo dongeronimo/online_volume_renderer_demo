@@ -67,7 +67,7 @@ export class LassoComputePipeline {
         depthOrArrayLayers: this.volumeDepth
       },
       dimension: '3d',
-      format: 'r8uint',
+      format: 'r32uint',  // Changed from r8uint - r32uint supports storage binding
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
       label: 'Lasso Mask Texture'
     });
@@ -77,8 +77,8 @@ export class LassoComputePipeline {
       label: 'Lasso Mask View (3D)'
     });
 
-    const sizeInMB = (this.volumeWidth * this.volumeHeight * this.volumeDepth / 1024 / 1024).toFixed(2);
-    console.log(`✓ Created lasso mask texture: ${this.volumeWidth}×${this.volumeHeight}×${this.volumeDepth} = ${sizeInMB} MB`);
+    const sizeInMB = (this.volumeWidth * this.volumeHeight * this.volumeDepth * 4 / 1024 / 1024).toFixed(2);
+    console.log(`✓ Created lasso mask texture: ${this.volumeWidth}×${this.volumeHeight}×${this.volumeDepth} = ${sizeInMB} MB (r32uint)`);
     console.log(`  Texture:`, this.maskTexture);
     console.log(`  Texture View:`, this.maskTextureView);
   }
@@ -139,7 +139,7 @@ export class LassoComputePipeline {
           visibility: GPUShaderStage.COMPUTE,
           storageTexture: {
             access: 'write-only',
-            format: 'r8uint',
+            format: 'r32uint',
             viewDimension: '3d'
           }
         }

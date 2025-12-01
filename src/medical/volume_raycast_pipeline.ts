@@ -339,7 +339,7 @@ export class VolumeRenderPipeline {
     const dummyTexture = this.device.createTexture({
       size: { width: 1, height: 1, depthOrArrayLayers: 1 },
       dimension: '3d',
-      format: 'r8uint',
+      format: 'r32uint',  // Changed from r8uint to match compute shader
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       label: 'Dummy Lasso Mask'
     });
@@ -347,8 +347,8 @@ export class VolumeRenderPipeline {
     // Fill with 1 (all visible)
     this.device.queue.writeTexture(
       { texture: dummyTexture },
-      new Uint8Array([1]),
-      { bytesPerRow: 1, rowsPerImage: 1 },
+      new Uint32Array([1]),  // Changed from Uint8Array to Uint32Array
+      { bytesPerRow: 4, rowsPerImage: 1 },  // Changed from 1 to 4 bytes
       { width: 1, height: 1, depthOrArrayLayers: 1 }
     );
 
