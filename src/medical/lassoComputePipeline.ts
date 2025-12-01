@@ -58,6 +58,8 @@ export class LassoComputePipeline {
    * Create the binary mask texture
    */
   private createMaskTexture(): void {
+    console.log(`Creating mask texture: ${this.volumeWidth}×${this.volumeHeight}×${this.volumeDepth}`);
+
     this.maskTexture = this.device.createTexture({
       size: {
         width: this.volumeWidth,
@@ -75,9 +77,10 @@ export class LassoComputePipeline {
       label: 'Lasso Mask View (3D)'
     });
 
-    console.log(`Created lasso mask texture: ${this.volumeWidth}×${this.volumeHeight}×${this.volumeDepth} = ${
-      (this.volumeWidth * this.volumeHeight * this.volumeDepth / 1024 / 1024).toFixed(2)
-    } MB`);
+    const sizeInMB = (this.volumeWidth * this.volumeHeight * this.volumeDepth / 1024 / 1024).toFixed(2);
+    console.log(`✓ Created lasso mask texture: ${this.volumeWidth}×${this.volumeHeight}×${this.volumeDepth} = ${sizeInMB} MB`);
+    console.log(`  Texture:`, this.maskTexture);
+    console.log(`  Texture View:`, this.maskTextureView);
   }
 
   /**

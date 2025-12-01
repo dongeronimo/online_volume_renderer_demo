@@ -306,19 +306,33 @@ const graphicsContext = new GraphicsContext("canvas",
     await gLassoRenderPipeline.initialize();
 
     // LASSO: Create compute pipeline for mask generation
-    gLassoComputePipeline = new LassoComputePipeline(ctx.Device());
-    await gLassoComputePipeline.initialize(
-      parsed.width,
-      parsed.height,
-      parsed.numSlices
-    );
+    console.log('🔧 Creating lasso compute pipeline...');
+    try {
+      gLassoComputePipeline = new LassoComputePipeline(ctx.Device());
+      await gLassoComputePipeline.initialize(
+        parsed.width,
+        parsed.height,
+        parsed.numSlices
+      );
+      console.log('✓ Lasso compute pipeline created');
 
-    // Initialize with empty mask (all visible)
-    await gLassoComputePipeline.clearMask();
+      // Initialize with empty mask (all visible)
+      console.log('🔧 Clearing mask to all visible...');
+      await gLassoComputePipeline.clearMask();
+      console.log('✓ Mask cleared');
 
-    // Bind mask texture to volume pipelines
-    gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
-    gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+      // Bind mask texture to volume pipelines
+      console.log('🔧 Binding mask texture to volume pipelines...');
+      const maskView = gLassoComputePipeline.getMaskTextureView();
+      console.log('  Mask texture view:', maskView);
+
+      gVolumeRenderPipeline!.setMaskTexture(maskView);
+      gCTFVolumeRenderPipeline!.setMaskTexture(maskView);
+      console.log('✓ Mask texture bound to both pipelines');
+    } catch (error) {
+      console.error('❌ Failed to initialize lasso compute pipeline:', error);
+      throw error;
+    }
 
     // LASSO: Set up 'L' key toggle for lasso mode
     window.addEventListener('keydown', (e) => {
