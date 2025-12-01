@@ -3,7 +3,7 @@ import { vec2, vec3, mat4 } from 'wgpu-matrix';
 /**
  * Represents a single lasso contour with associated camera state
  */
-export interface LassoContour {
+export type LassoContour = {
   // Simplified 2D points in NDC space [-1, 1]
   points: vec2[];
 
@@ -20,7 +20,7 @@ export interface LassoContour {
 
   // Timestamp for ordering
   timestamp: number;
-}
+};
 
 /**
  * Manages the stack of lasso contours with undo/redo support

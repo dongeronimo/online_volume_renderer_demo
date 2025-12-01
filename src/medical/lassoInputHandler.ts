@@ -1,5 +1,6 @@
 import { vec2, vec3, mat4 } from 'wgpu-matrix';
-import { LassoContour, LassoManager } from './lassoDrawing';
+import type { LassoContour } from './lassoDrawing';
+import { LassoManager } from './lassoDrawing';
 import { simplifyContour } from './lassoSimplification';
 import { Camera } from '../graphics/entities/gameObject';
 

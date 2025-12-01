@@ -43,7 +43,7 @@ export class LassoRenderPipeline {
 
     // Write identity matrix
     const identityMatrix = mat4.identity();
-    this.device.queue.writeBuffer(buffer, 0, identityMatrix as Float32Array);
+    this.device.queue.writeBuffer(buffer, 0, new Float32Array(identityMatrix));
 
     return buffer;
   }
