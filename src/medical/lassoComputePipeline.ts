@@ -326,6 +326,10 @@ export class LassoComputePipeline {
         maxX = Math.max(maxX, point[0]);
         maxY = Math.max(maxY, point[1]);
       }
+
+      console.log(`    AABB: X[${minX.toFixed(3)}, ${maxX.toFixed(3)}], Y[${minY.toFixed(3)}, ${maxY.toFixed(3)}]`);
+      console.log(`    Sample points: [${contour.points.slice(0, 3).map(p => `(${p[0].toFixed(3)},${p[1].toFixed(3)})`).join(', ')}...]`);
+
       view.setFloat32(offset + 0, minX, true);
       view.setFloat32(offset + 4, minY, true);
       view.setFloat32(offset + 8, -1.0, true); // Z min (full depth range)
