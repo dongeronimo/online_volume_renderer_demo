@@ -277,7 +277,13 @@ const graphicsContext = new GraphicsContext("canvas",
           const contours = gLassoManager.getActiveContours();
           const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
 
-          await gLassoComputePipeline.computeMask(contours, modelMatrix);
+          await gLassoComputePipeline.computeMask(
+            contours,
+            modelMatrix,
+            (current, total) => {
+              console.log(`  📊 Progress: ${current}/${total} chunks (${Math.round(current / total * 100)}%)`);
+            }
+          );
 
           // Update mask texture in volume pipelines
           gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());

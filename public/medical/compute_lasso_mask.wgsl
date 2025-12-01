@@ -21,7 +21,8 @@ struct ComputeParams {
   volumeWidth: u32,
   volumeHeight: u32,
   volumeDepth: u32,
-  modelMatrix: mat4x4<f32>  // Volume transform
+  zOffset: u32,             // Z offset for chunked processing
+  modelMatrix: mat4x4<f32>  // Volume transform (must be 16-byte aligned)
 }
 
 @group(0) @binding(0) var<storage, read> contours: array<ContourData>;
@@ -106,20 +107,24 @@ fn isVoxelMasked(worldPos: vec3<f32>) -> bool {
 
 @compute @workgroup_size(8, 4, 4)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  // Apply Z offset for chunked processing
+  let actualZ = gid.z + params.zOffset;
+  let actualVoxelIndex = vec3<u32>(gid.x, gid.y, actualZ);
+
   // Bounds check
   if (gid.x >= params.volumeWidth ||
       gid.y >= params.volumeHeight ||
-      gid.z >= params.volumeDepth) {
+      actualZ >= params.volumeDepth) {
     return;
   }
 
   // Convert voxel index to world position
-  let worldPos = voxelToWorld(gid);
+  let worldPos = voxelToWorld(actualVoxelIndex);
 
   // Test if voxel is masked
   let masked = isVoxelMasked(worldPos);
 
   // Write result: 0 = masked (inside contour), 1 = visible
   let value = select(1u, 0u, masked);
-  textureStore(outputMask, gid, vec4<u32>(value, 0u, 0u, 0u));
+  textureStore(outputMask, actualVoxelIndex, vec4<u32>(value, 0u, 0u, 0u));
 }

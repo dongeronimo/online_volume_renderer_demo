@@ -175,7 +175,11 @@ export class LassoComputePipeline {
   /**
    * Compute the mask texture for the given contours
    */
-  async computeMask(contours: ReadonlyArray<LassoContour>, modelMatrix: mat4): Promise<void> {
+  async computeMask(
+    contours: ReadonlyArray<LassoContour>,
+    modelMatrix: mat4,
+    onProgress?: (current: number, total: number) => void
+  ): Promise<void> {
     if (!this.initialized) {
       console.error('Lasso compute pipeline not initialized');
       return;
@@ -183,44 +187,74 @@ export class LassoComputePipeline {
 
     const startTime = performance.now();
 
-    // Update buffers
+    // Update buffers once at the start
     this.updateBuffers(contours, modelMatrix);
 
-    // Create command encoder
-    const commandEncoder = this.device.createCommandEncoder({
-      label: 'Lasso Compute Command Encoder'
-    });
-
-    // Begin compute pass
-    const computePass = commandEncoder.beginComputePass({
-      label: 'Lasso Mask Compute Pass'
-    });
-
-    computePass.setPipeline(this.pipeline);
-    computePass.setBindGroup(0, this.bindGroup);
-
-    // Dispatch compute shader (8×4×4 workgroup size = 128 invocations)
+    // Calculate total workgroups
     const workgroupsX = Math.ceil(this.volumeWidth / 8);
     const workgroupsY = Math.ceil(this.volumeHeight / 4);
-    const workgroupsZ = Math.ceil(this.volumeDepth / 4);
+    const totalWorkgroupsZ = Math.ceil(this.volumeDepth / 4);
 
-    computePass.dispatchWorkgroups(workgroupsX, workgroupsY, workgroupsZ);
-    computePass.end();
+    // Process in chunks to avoid GPU timeout
+    // Each chunk processes CHUNK_SIZE workgroup slices in Z
+    const CHUNK_SIZE = 16; // Process 16 workgroups in Z at a time (= 64 slices)
+    const numChunks = Math.ceil(totalWorkgroupsZ / CHUNK_SIZE);
 
-    // Submit commands
-    this.device.queue.submit([commandEncoder.finish()]);
+    console.log(`🔄 Computing mask in ${numChunks} chunks (${CHUNK_SIZE} Z-workgroups per chunk)...`);
 
-    // Wait for completion (for timing)
+    // Process each chunk with a delay to allow rendering
+    for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
+      const zWorkgroupStart = chunkIndex * CHUNK_SIZE;
+      const zWorkgroupCount = Math.min(CHUNK_SIZE, totalWorkgroupsZ - zWorkgroupStart);
+
+      // Calculate actual Z voxel offset (workgroup index * workgroup size in Z)
+      const zVoxelOffset = zWorkgroupStart * 4; // Each workgroup processes 4 voxels in Z
+
+      // Update params buffer with Z offset for this chunk
+      this.updateBuffers(contours, modelMatrix, zVoxelOffset);
+
+      // Create command encoder for this chunk
+      const commandEncoder = this.device.createCommandEncoder({
+        label: `Lasso Compute Chunk ${chunkIndex + 1}/${numChunks}`
+      });
+
+      const computePass = commandEncoder.beginComputePass({
+        label: `Lasso Mask Compute Pass (chunk ${chunkIndex + 1}/${numChunks})`
+      });
+
+      computePass.setPipeline(this.pipeline);
+      computePass.setBindGroup(0, this.bindGroup);
+
+      // Dispatch only this chunk's Z workgroups
+      // The shader adds zOffset to compute actual voxel Z coordinates
+      computePass.dispatchWorkgroups(workgroupsX, workgroupsY, zWorkgroupCount);
+      computePass.end();
+
+      // Submit this chunk
+      this.device.queue.submit([commandEncoder.finish()]);
+
+      // Report progress
+      if (onProgress) {
+        onProgress(chunkIndex + 1, numChunks);
+      }
+
+      // Yield to browser between chunks (except on last chunk)
+      if (chunkIndex < numChunks - 1) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    // Wait for final chunk to complete
     await this.device.queue.onSubmittedWorkDone();
 
     const endTime = performance.now();
-    console.log(`✓ Lasso mask computed in ${(endTime - startTime).toFixed(2)}ms (${contours.length} contours, ${workgroupsX}×${workgroupsY}×${workgroupsZ} workgroups)`);
+    console.log(`✓ Lasso mask computed in ${(endTime - startTime).toFixed(2)}ms (${contours.length} contours, ${numChunks} chunks, ${workgroupsX}×${workgroupsY}×${totalWorkgroupsZ} total workgroups)`);
   }
 
   /**
    * Update GPU buffers with current contours and parameters
    */
-  private updateBuffers(contours: ReadonlyArray<LassoContour>, modelMatrix: mat4): void {
+  private updateBuffers(contours: ReadonlyArray<LassoContour>, modelMatrix: mat4, zOffset: number = 0): void {
     // Update contours buffer
     const contoursData = this.packContoursData(contours);
     this.device.queue.writeBuffer(this.contoursBuffer, 0, contoursData);
@@ -230,14 +264,16 @@ export class LassoComputePipeline {
     const paramsView = new DataView(paramsData.buffer);
 
     // Write as u32
-    paramsView.setUint32(0, contours.length, true); // numContours
-    paramsView.setUint32(4, this.volumeWidth, true);
-    paramsView.setUint32(8, this.volumeHeight, true);
-    paramsView.setUint32(12, this.volumeDepth, true);
+    paramsView.setUint32(0, contours.length, true);  // numContours (offset 0)
+    paramsView.setUint32(4, this.volumeWidth, true);  // volumeWidth (offset 4)
+    paramsView.setUint32(8, this.volumeHeight, true); // volumeHeight (offset 8)
+    paramsView.setUint32(12, this.volumeDepth, true); // volumeDepth (offset 12)
+    paramsView.setUint32(16, zOffset, true);          // zOffset (offset 16)
+    // Padding from 20-31 for mat4x4 alignment
 
-    // Write modelMatrix at offset 16 (aligned to 16 bytes)
+    // Write modelMatrix at offset 32 (16-byte aligned for mat4x4)
     for (let i = 0; i < 16; i++) {
-      paramsView.setFloat32(16 + i * 4, modelMatrix[i], true);
+      paramsView.setFloat32(32 + i * 4, modelMatrix[i], true);
     }
 
     this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData);
