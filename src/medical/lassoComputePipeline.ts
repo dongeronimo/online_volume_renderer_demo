@@ -219,9 +219,10 @@ export class LassoComputePipeline {
       vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
 
       const contour = contours[0];
-      const viewProj = mat4.multiply(mat4.create(), contour.cameraViewMatrix, contour.cameraProjectionMatrix);
+      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
+      const viewProjTransposed = mat4.transpose(mat4.create(), viewProj);
       const clipPos = vec4.create();
-      vec4.transformMat4(clipPos, worldPos4, viewProj);
+      vec4.transformMat4(clipPos, worldPos4, viewProjTransposed);
 
       if (clipPos[3] > 0) {
         const ndcX = clipPos[0] / clipPos[3];
@@ -341,10 +342,15 @@ export class LassoComputePipeline {
       offset += 12;
 
       // viewProjMatrix: mat4x4<f32>
-      // FIX: Correct order is view * projection (not projection * view)
-      const viewProj = mat4.multiply(mat4.create(), contour.cameraViewMatrix, contour.cameraProjectionMatrix);
+      // Correct order: projection * view (standard graphics convention)
+      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
+
+      // CRITICAL FIX: WGSL expects column-major matrices, but wgpu-matrix is row-major
+      // We MUST transpose before sending to GPU!
+      const viewProjTransposed = mat4.transpose(mat4.create(), viewProj);
+
       for (let i = 0; i < 16; i++) {
-        view.setFloat32(offset + i * 4, viewProj[i], true);
+        view.setFloat32(offset + i * 4, viewProjTransposed[i], true);
       }
       offset += 64;
 
