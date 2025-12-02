@@ -215,7 +215,7 @@ export class LassoComputePipeline {
         normalized[1] * 2 - 1,
         normalized[2] * 2 - 1
       ];
-      const worldPos4 = vec4.create(volumeSpace[0], volumeSpace[1], volumeSpace[2], 1.0);
+      const worldPos4 = vec4.fromValues(volumeSpace[0], volumeSpace[1], volumeSpace[2], 1.0);
       vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
 
       const contour = contours[0];
@@ -419,7 +419,9 @@ export class LassoComputePipeline {
     if (!this.initialized) return;
 
     // Compute with zero contours will fill mask with 1s (all visible)
-    await this.computeMask([], mat4.identity());
+    const identityMatrix = mat4.create();
+    mat4.identity(identityMatrix);
+    await this.computeMask([], identityMatrix);
   }
 
   /**
