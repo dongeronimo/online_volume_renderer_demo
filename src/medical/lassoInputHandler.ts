@@ -233,11 +233,12 @@ export class LassoInputHandler {
     // Camera forward is -Z in view space, which is third row of inverse view matrix
     const viewInverse = mat4.create();
     mat4.invert(viewInverse, cameraViewMatrix);
-    const planeNormal = vec3.normalize([
+    const planeNormal = vec3.fromValues(
       -viewInverse[8],
       -viewInverse[9],
       -viewInverse[10]
-    ]);
+    );
+    vec3.normalize(planeNormal, planeNormal);
 
     // Compute centroid
     let centroidX = 0;
