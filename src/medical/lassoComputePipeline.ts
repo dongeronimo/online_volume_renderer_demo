@@ -1,4 +1,4 @@
-import { mat4, vec3 } from 'wgpu-matrix';
+import { mat4, vec3, vec4 } from 'wgpu-matrix';
 import type { LassoContour } from './lassoDrawing';
 
 /**
@@ -201,6 +201,36 @@ export class LassoComputePipeline {
     const numChunks = Math.ceil(totalWorkgroupsZ / CHUNK_SIZE);
 
     console.log(`🔄 Computing mask in ${numChunks} chunks (${CHUNK_SIZE} Z-workgroups per chunk)...`);
+
+    // DEBUG: Test where center voxel projects
+    if (contours.length > 0) {
+      const centerVoxel = [this.volumeWidth / 2, this.volumeHeight / 2, this.volumeDepth / 2];
+      const normalized = [
+        centerVoxel[0] / (this.volumeWidth - 1),
+        centerVoxel[1] / (this.volumeHeight - 1),
+        centerVoxel[2] / (this.volumeDepth - 1)
+      ];
+      const volumeSpace = [
+        normalized[0] * 2 - 1,
+        normalized[1] * 2 - 1,
+        normalized[2] * 2 - 1
+      ];
+      const worldPos4 = vec4.create(volumeSpace[0], volumeSpace[1], volumeSpace[2], 1.0);
+      vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
+
+      const contour = contours[0];
+      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
+      const clipPos = vec4.create();
+      vec4.transformMat4(clipPos, worldPos4, viewProj);
+
+      if (clipPos[3] > 0) {
+        const ndcX = clipPos[0] / clipPos[3];
+        const ndcY = clipPos[1] / clipPos[3];
+        console.log(`  🧪 Center voxel projects to NDC (${ndcX.toFixed(3)}, ${ndcY.toFixed(3)})`);
+      } else {
+        console.log(`  🧪 Center voxel is behind camera (w=${clipPos[3].toFixed(3)})`);
+      }
+    }
 
     // Process each chunk with a delay to allow rendering
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {

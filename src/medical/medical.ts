@@ -283,6 +283,8 @@ const graphicsContext = new GraphicsContext("canvas",
           const contours = gLassoManager.getActiveContours();
           const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
 
+          console.log(`  Model matrix: [${modelMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}...]`);
+
           try {
             await gLassoComputePipeline.computeMask(
               contours,
