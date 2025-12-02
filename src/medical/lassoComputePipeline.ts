@@ -219,8 +219,18 @@ export class LassoComputePipeline {
       vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
 
       const contour = contours[0];
+
+      // DEBUG: Print matrices to verify they're valid
+      console.log(`  View matrix row 0: [${contour.cameraViewMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+      console.log(`  View matrix row 3: [${contour.cameraViewMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
+      console.log(`  Proj matrix row 0: [${contour.cameraProjectionMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+      console.log(`  Proj matrix row 3: [${contour.cameraProjectionMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
+
       const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
       const viewProjTransposed = mat4.transpose(mat4.create(), viewProj);
+
+      console.log(`  ViewProj (transposed) row 3: [${viewProjTransposed.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
+
       const clipPos = vec4.create();
       vec4.transformMat4(clipPos, worldPos4, viewProjTransposed);
 
