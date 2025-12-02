@@ -1,4 +1,4 @@
-import { vec2, vec3, mat4 } from 'wgpu-matrix';
+import { vec2, vec3, mat4, quat } from 'wgpu-matrix';
 import type { LassoContour } from './lassoDrawing';
 import { LassoManager } from './lassoDrawing';
 import { simplifyContour } from './lassoSimplification';
@@ -213,7 +213,13 @@ export class LassoInputHandler {
   private createContour(points: vec2[]): LassoContour {
     // Capture current camera state
     const cameraPosition = vec3.clone(this.camera.position);
-    const cameraViewMatrix = mat4.clone(this.camera.viewMatrix);
+
+    // CRITICAL FIX: Camera.viewMatrix is never updated, so we compute it ourselves
+    // from position and rotation quaternion (same logic as Camera.updateViewMatrix())
+    const rotationMatrix = mat4.fromQuat(mat4.create(), this.camera.rotation);
+    const translationMatrix = mat4.fromTranslation(mat4.create(), vec3.negate(vec3.create(), this.camera.position));
+    const cameraViewMatrix = mat4.multiply(mat4.create(), rotationMatrix, translationMatrix);
+
     const cameraProjectionMatrix = mat4.clone(this.camera.projectionMatrix);
 
     // Compute plane normal (camera forward direction)
