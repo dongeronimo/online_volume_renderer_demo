@@ -219,7 +219,7 @@ export class LassoComputePipeline {
       vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
 
       const contour = contours[0];
-      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
+      const viewProj = mat4.multiply(mat4.create(), contour.cameraViewMatrix, contour.cameraProjectionMatrix);
       const clipPos = vec4.create();
       vec4.transformMat4(clipPos, worldPos4, viewProj);
 
@@ -341,7 +341,8 @@ export class LassoComputePipeline {
       offset += 12;
 
       // viewProjMatrix: mat4x4<f32>
-      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
+      // FIX: Correct order is view * projection (not projection * view)
+      const viewProj = mat4.multiply(mat4.create(), contour.cameraViewMatrix, contour.cameraProjectionMatrix);
       for (let i = 0; i < 16; i++) {
         view.setFloat32(offset + i * 4, viewProj[i], true);
       }
