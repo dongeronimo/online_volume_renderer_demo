@@ -248,7 +248,7 @@ export class LassoInputHandler {
     }
     centroidX /= points.length;
     centroidY /= points.length;
-    const centroid = vec2.create(centroidX, centroidY);
+    const centroid = vec2.fromValues(centroidX, centroidY);
 
     console.log(`Contour camera: pos=${cameraPosition}, normal=${planeNormal}, centroid=${centroid}`);
 
@@ -274,7 +274,7 @@ export class LassoInputHandler {
     const ndcX = (canvasX / rect.width) * 2 - 1;
     const ndcY = -((canvasY / rect.height) * 2 - 1); // Flip Y (canvas Y is top-down)
 
-    return vec2.create(ndcX, ndcY);
+    return vec2.fromValues(ndcX, ndcY);
   }
 
   /**
