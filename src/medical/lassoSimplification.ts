@@ -1,4 +1,4 @@
-import { vec2 } from 'wgpu-matrix';
+import { vec2 } from 'gl-matrix';
 
 /**
  * Simplifies a polyline using the Ramer-Douglas-Peucker algorithm

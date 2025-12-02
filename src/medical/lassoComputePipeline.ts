@@ -1,4 +1,4 @@
-import { mat4, vec3, vec4 } from 'wgpu-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import type { LassoContour } from './lassoDrawing';
 
 /**
@@ -226,13 +226,12 @@ export class LassoComputePipeline {
       console.log(`  Proj matrix row 0: [${contour.cameraProjectionMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
       console.log(`  Proj matrix row 3: [${contour.cameraProjectionMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
 
-      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
-      const viewProjTransposed = mat4.transpose(mat4.create(), viewProj);
-
-      console.log(`  ViewProj (transposed) row 3: [${viewProjTransposed.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
+      // No transpose needed - gl-matrix uses same layout throughout codebase
+      const viewProj = mat4.create();
+      mat4.multiply(viewProj, contour.cameraProjectionMatrix, contour.cameraViewMatrix);
 
       const clipPos = vec4.create();
-      vec4.transformMat4(clipPos, worldPos4, viewProjTransposed);
+      vec4.transformMat4(clipPos, worldPos4, viewProj);
 
       if (clipPos[3] > 0) {
         const ndcX = clipPos[0] / clipPos[3];
@@ -352,15 +351,12 @@ export class LassoComputePipeline {
       offset += 12;
 
       // viewProjMatrix: mat4x4<f32>
-      // Correct order: projection * view (standard graphics convention)
-      const viewProj = mat4.multiply(mat4.create(), contour.cameraProjectionMatrix, contour.cameraViewMatrix);
-
-      // CRITICAL FIX: WGSL expects column-major matrices, but wgpu-matrix is row-major
-      // We MUST transpose before sending to GPU!
-      const viewProjTransposed = mat4.transpose(mat4.create(), viewProj);
+      // Using gl-matrix (same as rest of codebase) - no transpose needed!
+      const viewProj = mat4.create();
+      mat4.multiply(viewProj, contour.cameraProjectionMatrix, contour.cameraViewMatrix);
 
       for (let i = 0; i < 16; i++) {
-        view.setFloat32(offset + i * 4, viewProjTransposed[i], true);
+        view.setFloat32(offset + i * 4, viewProj[i], true);
       }
       offset += 64;
 

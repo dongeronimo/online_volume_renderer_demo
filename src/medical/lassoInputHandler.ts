@@ -1,4 +1,4 @@
-import { vec2, vec3, mat4, quat } from 'wgpu-matrix';
+import { vec2, vec3, mat4, quat } from 'gl-matrix';
 import type { LassoContour } from './lassoDrawing';
 import { LassoManager } from './lassoDrawing';
 import { simplifyContour } from './lassoSimplification';
@@ -216,15 +216,23 @@ export class LassoInputHandler {
 
     // CRITICAL FIX: Camera.viewMatrix is never updated, so we compute it ourselves
     // from position and rotation quaternion (same logic as Camera.updateViewMatrix())
-    const rotationMatrix = mat4.fromQuat(mat4.create(), this.camera.rotation);
-    const translationMatrix = mat4.fromTranslation(mat4.create(), vec3.negate(vec3.create(), this.camera.position));
-    const cameraViewMatrix = mat4.multiply(mat4.create(), rotationMatrix, translationMatrix);
+    const rotationMatrix = mat4.create();
+    mat4.fromQuat(rotationMatrix, this.camera.rotation);
+
+    const negatedPosition = vec3.create();
+    vec3.negate(negatedPosition, this.camera.position);
+    const translationMatrix = mat4.create();
+    mat4.fromTranslation(translationMatrix, negatedPosition);
+
+    const cameraViewMatrix = mat4.create();
+    mat4.multiply(cameraViewMatrix, rotationMatrix, translationMatrix);
 
     const cameraProjectionMatrix = mat4.clone(this.camera.projectionMatrix);
 
     // Compute plane normal (camera forward direction)
     // Camera forward is -Z in view space, which is third row of inverse view matrix
-    const viewInverse = mat4.invert(cameraViewMatrix);
+    const viewInverse = mat4.create();
+    mat4.invert(viewInverse, cameraViewMatrix);
     const planeNormal = vec3.normalize([
       -viewInverse[8],
       -viewInverse[9],

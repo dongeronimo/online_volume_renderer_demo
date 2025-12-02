@@ -1,4 +1,4 @@
-import { mat4 } from 'wgpu-matrix';
+import { mat4 } from 'gl-matrix';
 
 /**
  * WebGPU pipeline for rendering lasso polylines

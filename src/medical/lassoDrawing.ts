@@ -1,4 +1,4 @@
-import { vec2, vec3, mat4 } from 'wgpu-matrix';
+import { vec2, vec3, mat4 } from 'gl-matrix';
 
 /**
  * Represents a single lasso contour with associated camera state
