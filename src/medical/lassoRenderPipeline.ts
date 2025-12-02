@@ -41,8 +41,9 @@ export class LassoRenderPipeline {
       label: 'Lasso Uniform Buffer'
     });
 
-    // Write identity matrix
-    const identityMatrix = mat4.identity();
+    // Write identity matrix (gl-matrix API uses out parameter)
+    const identityMatrix = mat4.create();
+    mat4.identity(identityMatrix);
     this.device.queue.writeBuffer(buffer, 0, new Float32Array(identityMatrix));
 
     return buffer;
