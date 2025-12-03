@@ -283,7 +283,7 @@ const graphicsContext = new GraphicsContext("canvas",
           const contours = gLassoManager.getActiveContours();
           const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
 
-          console.log(`  Model matrix: [${modelMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}...]`);
+          console.log(`  Model matrix: [${Array.from(modelMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}...]`);
 
           try {
             await gLassoComputePipeline.computeMask(
@@ -314,7 +314,7 @@ const graphicsContext = new GraphicsContext("canvas",
       },
       onPointsUpdate: (points) => {
         // Update render pipeline with current points for real-time feedback
-        gLassoRenderPipeline?.updatePoints(points);
+        gLassoRenderPipeline?.updatePoints(points as unknown as ReadonlyArray<readonly [number, number]>);
 
         // Trigger render to show drawing progress
         numberOfHQRenderings = 0;

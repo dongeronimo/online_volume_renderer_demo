@@ -1,4 +1,4 @@
-import { vec2, vec3, mat4, quat } from 'gl-matrix';
+import { vec2, vec3, mat4 } from 'gl-matrix';
 import type { LassoContour } from './lassoDrawing';
 import { LassoManager } from './lassoDrawing';
 import { simplifyContour } from './lassoSimplification';
@@ -261,7 +261,7 @@ export class LassoInputHandler {
 
     const rotationMatrix = mat4.create();
     mat4.fromQuat(rotationMatrix, this.camera.rotation);
-    console.log(`  📐 Rotation matrix row 0: [${rotationMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+    console.log(`  📐 Rotation matrix row 0: [${Array.from(rotationMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}]`);
 
     const negatedPosition = vec3.create();
     vec3.negate(negatedPosition, this.camera.position);
@@ -270,7 +270,7 @@ export class LassoInputHandler {
 
     const cameraViewMatrix = mat4.create();
     mat4.multiply(cameraViewMatrix, rotationMatrix, translationMatrix);
-    console.log(`  📐 View matrix row 0: [${cameraViewMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+    console.log(`  📐 View matrix row 0: [${Array.from(cameraViewMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}]`);
 
     const cameraProjectionMatrix = mat4.clone(this.camera.projectionMatrix);
 
