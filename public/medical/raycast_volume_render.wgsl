@@ -329,19 +329,12 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
     );
     let maskValue = textureLoad(lassoMask, voxelCoord, 0).r;
 
-    // DEBUG: Color masked voxels red instead of skipping
+    // Skip masked voxels (inside lasso contour)
     if (maskValue == 0u) {
-      // Voxel is masked (inside lasso contour) - SHOW AS RED for debugging
-      return vec4<f32>(1.0, 0.0, 0.0, 1.0); // Bright red
+      t += uniforms.stepSize;
+      stepCount++;
+      continue;
     }
-
-    // Original cutting logic (commented out for debug):
-    // if (maskValue == 0u) {
-    //   // Voxel is masked (inside lasso contour) - skip this sample
-    //   t += uniforms.stepSize;
-    //   stepCount++;
-    //   continue;
-    // }
 
     // Get current chunk
     let chunkIdx = getChunkIndex(pos);
