@@ -22,6 +22,7 @@ struct ComputeParams {
   volumeHeight: u32,
   volumeDepth: u32,
   zOffset: u32,             // Z offset for chunked processing
+  voxelSpacing: vec3<f32>,  // Voxel spacing for non-cubic volumes (16-byte aligned)
   modelMatrix: mat4x4<f32>  // Volume transform (must be 16-byte aligned)
 }
 
@@ -41,8 +42,11 @@ fn voxelToWorld(voxelIndex: vec3<u32>) -> vec3<f32> {
   // Convert to [-1, 1] volume space
   let volumeSpace = normalized * 2.0 - 1.0;
 
+  // Apply voxel spacing to match rendering coordinate system
+  let scaledVolumeSpace = volumeSpace * params.voxelSpacing;
+
   // Transform to world space
-  let worldPos = params.modelMatrix * vec4<f32>(volumeSpace, 1.0);
+  let worldPos = params.modelMatrix * vec4<f32>(scaledVolumeSpace, 1.0);
   return worldPos.xyz / worldPos.w;
 }
 

@@ -25,13 +25,19 @@ export class LassoComputePipeline {
   private volumeWidth: number = 0;
   private volumeHeight: number = 0;
   private volumeDepth: number = 0;
+  private voxelSpacing: [number, number, number] = [1, 1, 1];
 
   constructor(private device: GPUDevice) {}
 
   /**
    * Initialize the compute pipeline and create buffers
    */
-  async initialize(volumeWidth: number, volumeHeight: number, volumeDepth: number): Promise<void> {
+  async initialize(
+    volumeWidth: number,
+    volumeHeight: number,
+    volumeDepth: number,
+    voxelSpacing: [number, number, number]
+  ): Promise<void> {
     if (this.initialized) {
       console.warn('Lasso compute pipeline already initialized');
       return;
@@ -40,6 +46,7 @@ export class LassoComputePipeline {
     this.volumeWidth = volumeWidth;
     this.volumeHeight = volumeHeight;
     this.volumeDepth = volumeDepth;
+    this.voxelSpacing = voxelSpacing;
 
     // Create mask texture
     this.createMaskTexture();
@@ -301,17 +308,29 @@ export class LassoComputePipeline {
     const paramsData = new Float32Array(64); // Plenty of space
     const paramsView = new DataView(paramsData.buffer);
 
-    // Write as u32
-    paramsView.setUint32(0, contours.length, true);  // numContours (offset 0)
+    // WGSL struct layout with proper alignment:
+    // Offset 0-19: 5x u32 (numContours, volumeWidth, volumeHeight, volumeDepth, zOffset)
+    // Offset 20-31: padding (12 bytes)
+    // Offset 32-43: voxelSpacing (vec3, 12 bytes, align 16)
+    // Offset 44-47: padding (4 bytes)
+    // Offset 48-111: modelMatrix (mat4x4, 64 bytes, align 16)
+
+    paramsView.setUint32(0, contours.length, true);   // numContours (offset 0)
     paramsView.setUint32(4, this.volumeWidth, true);  // volumeWidth (offset 4)
     paramsView.setUint32(8, this.volumeHeight, true); // volumeHeight (offset 8)
     paramsView.setUint32(12, this.volumeDepth, true); // volumeDepth (offset 12)
     paramsView.setUint32(16, zOffset, true);          // zOffset (offset 16)
-    // Padding from 20-31 for mat4x4 alignment
+    // Padding from 20-31 for vec3 alignment
 
-    // Write modelMatrix at offset 32 (16-byte aligned for mat4x4)
+    // voxelSpacing at offset 32 (vec3, 16-byte aligned)
+    paramsView.setFloat32(32, this.voxelSpacing[0], true);
+    paramsView.setFloat32(36, this.voxelSpacing[1], true);
+    paramsView.setFloat32(40, this.voxelSpacing[2], true);
+    // Padding from 44-47 for mat4x4 alignment
+
+    // modelMatrix at offset 48 (16-byte aligned for mat4x4)
     for (let i = 0; i < 16; i++) {
-      paramsView.setFloat32(32 + i * 4, modelMatrix[i], true);
+      paramsView.setFloat32(48 + i * 4, modelMatrix[i], true);
     }
 
     this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData);

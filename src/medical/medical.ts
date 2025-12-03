@@ -328,11 +328,23 @@ const graphicsContext = new GraphicsContext("canvas",
     // LASSO: Create compute pipeline for mask generation
     console.log('🔧 Creating lasso compute pipeline...');
     try {
+      // Compute voxel spacing (same logic as render loop)
+      const voxelSpacing: [number, number, number] = [
+        dicomMetadata!.pixelSpacing[0],
+        dicomMetadata!.pixelSpacing[1],
+        dicomMetadata!.sliceThickness
+      ];
+      const maxSpacing = Math.max(...voxelSpacing);
+      voxelSpacing[0] /= maxSpacing;
+      voxelSpacing[1] /= maxSpacing;
+      voxelSpacing[2] /= maxSpacing;
+
       gLassoComputePipeline = new LassoComputePipeline(ctx.Device());
       await gLassoComputePipeline.initialize(
         parsed.width,
         parsed.height,
-        parsed.numSlices
+        parsed.numSlices,
+        voxelSpacing
       );
       console.log('✓ Lasso compute pipeline created');
 
