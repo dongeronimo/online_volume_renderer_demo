@@ -48,6 +48,20 @@ export class WidgetDragHandler {
         return this.draggedWidgetId;
     }
 
+    private enabled: boolean = true;
+
+    /**
+     * Enable or disable widget dragging (e.g., during lasso drawing)
+     */
+    public setEnabled(enabled: boolean): void {
+        this.enabled = enabled;
+
+        // If disabling while dragging, end the drag
+        if (!enabled && this.isDragging) {
+            this.endDrag();
+        }
+    }
+
     private setupEventListeners(): void {
         // Mouse events
         this.canvas.addEventListener('mousedown', this.handlePointerDown.bind(this));
@@ -84,6 +98,9 @@ export class WidgetDragHandler {
     }
 
     private async tryStartDrag(screenX: number, screenY: number): Promise<boolean> {
+        // Don't start drag if disabled
+        if (!this.enabled) return false;
+
         // Get picking buffer dimensions
         const pickingWidth = this.pickingRenderTarget.getWidth();
         const pickingHeight = this.pickingRenderTarget.getHeight();

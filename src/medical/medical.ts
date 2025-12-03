@@ -21,6 +21,10 @@ import { WireframePipeline } from "../graphics/wireframePipeline";
 import { PickingPipeline } from "../graphics/pickingPipeline";
 import { PickingRenderTarget } from "./picking_render_target";
 import { WidgetDragHandler } from "../graphics/widgetDragHandler";
+import { LassoManager } from "./lassoDrawing";
+import { LassoInputHandler } from "./lassoInputHandler";
+import { LassoRenderPipeline } from "./lassoRenderPipeline";
+import { LassoComputePipeline } from "./lassoComputePipeline";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
@@ -39,6 +43,10 @@ let gWireframePipeline: WireframePipeline|undefined = undefined;
 let gPickingPipeline: PickingPipeline|undefined = undefined;
 let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
 let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
+let gLassoManager: LassoManager|undefined = undefined;
+let gLassoInputHandler: LassoInputHandler|undefined = undefined;
+let gLassoRenderPipeline: LassoRenderPipeline|undefined = undefined;
+let gLassoComputePipeline: LassoComputePipeline|undefined = undefined;
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -243,6 +251,135 @@ const graphicsContext = new GraphicsContext("canvas",
         console.log('Widget deselected');
       }
     });
+
+    // LASSO: Create lasso manager and input handler
+    gLassoManager = new LassoManager(64); // Max 64 contours
+    gLassoInputHandler = new LassoInputHandler(ctx.Canvas(), gLassoManager, gCamera);
+
+    // Set up lasso callbacks for camera lock/unlock
+    gLassoInputHandler.setCallbacks({
+      onDrawStart: () => {
+        // Lock camera controls while drawing
+        gMouseEventHandler?.setEnabled(false);
+        gWidgetDragHandler?.setEnabled(false);
+        console.log('🔒 Camera locked - drawing lasso');
+      },
+      onDrawEnd: async () => {
+        // Unlock camera controls when done
+        gMouseEventHandler?.setEnabled(true);
+        gWidgetDragHandler?.setEnabled(true);
+        console.log('🔓 Camera unlocked - lasso complete');
+
+        // Compute mask if lasso manager has contours
+        if (gLassoManager && gLassoManager.getContourCount() > 0 && gLassoComputePipeline) {
+          console.log('🔄 Computing lasso mask...');
+
+          // Force LQ mode during computation to keep render loop running
+          // This allows progressive updates and prevents hanging in HQ mode
+          const wasUsingHQ = usingHQ;
+          usingHQ = false;
+          numberOfHQRenderings = 0;
+
+          const contours = gLassoManager.getActiveContours();
+          const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
+
+          console.log(`  Model matrix: [${modelMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}...]`);
+
+          try {
+            await gLassoComputePipeline.computeMask(
+              contours,
+              modelMatrix,
+              (current, total) => {
+                console.log(`  📊 Progress: ${current}/${total} chunks (${Math.round(current / total * 100)}%)`);
+              }
+            );
+
+            // Update mask texture in volume pipelines
+            gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+            gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline.getMaskTextureView());
+
+            gLassoManager.markClean();
+
+            console.log('✓ Lasso mask applied to volume');
+          } finally {
+            // Restore HQ mode setting
+            usingHQ = wasUsingHQ;
+            numberOfHQRenderings = 0;
+          }
+        }
+
+        // Trigger one HQ render to show final result
+        usingHQ = true;
+        numberOfHQRenderings = 0;
+      },
+      onPointsUpdate: (points) => {
+        // Update render pipeline with current points for real-time feedback
+        gLassoRenderPipeline?.updatePoints(points);
+
+        // Trigger render to show drawing progress
+        numberOfHQRenderings = 0;
+      }
+    });
+
+    // LASSO: Create render pipeline for drawing lasso
+    gLassoRenderPipeline = new LassoRenderPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
+    await gLassoRenderPipeline.initialize();
+
+    // LASSO: Create compute pipeline for mask generation
+    console.log('🔧 Creating lasso compute pipeline...');
+    try {
+      // Compute voxel spacing (same logic as render loop)
+      const voxelSpacing: [number, number, number] = [
+        dicomMetadata!.pixelSpacing[0],
+        dicomMetadata!.pixelSpacing[1],
+        dicomMetadata!.sliceThickness
+      ];
+      const maxSpacing = Math.max(...voxelSpacing);
+      voxelSpacing[0] /= maxSpacing;
+      voxelSpacing[1] /= maxSpacing;
+      voxelSpacing[2] /= maxSpacing;
+
+      gLassoComputePipeline = new LassoComputePipeline(ctx.Device());
+      await gLassoComputePipeline.initialize(
+        parsed.width,
+        parsed.height,
+        parsed.numSlices,
+        voxelSpacing
+      );
+      console.log('✓ Lasso compute pipeline created');
+
+      // Initialize with empty mask (all visible)
+      console.log('🔧 Clearing mask to all visible...');
+      await gLassoComputePipeline.clearMask();
+      console.log('✓ Mask cleared');
+
+      // Bind mask texture to volume pipelines
+      console.log('🔧 Binding mask texture to volume pipelines...');
+      const maskView = gLassoComputePipeline.getMaskTextureView();
+      console.log('  Mask texture view:', maskView);
+
+      gVolumeRenderPipeline!.setMaskTexture(maskView);
+      gCTFVolumeRenderPipeline!.setMaskTexture(maskView);
+      console.log('✓ Mask texture bound to both pipelines');
+    } catch (error) {
+      console.error('❌ Failed to initialize lasso compute pipeline:', error);
+      throw error;
+    }
+
+    // LASSO: Set up 'L' key toggle for lasso mode
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'l' || e.key === 'L') {
+        const wasEnabled = gLassoInputHandler?.isEnabled() ?? false;
+        gLassoInputHandler?.setEnabled(!wasEnabled);
+
+        if (!wasEnabled) {
+          console.log('🎨 LASSO MODE ENABLED - Draw with left mouse button');
+        } else {
+          console.log('🎨 LASSO MODE DISABLED');
+        }
+      }
+    });
+
     //set up min and max
     gMinValue = parsed.huMin;
     gMaxValue = parsed.huMax;
@@ -488,6 +625,12 @@ const graphicsContext = new GraphicsContext("canvas",
         });
       }
     }
+
+    // LASSO: Render active lasso contour (if drawing)
+    if (gLassoRenderPipeline && gLassoInputHandler?.isCurrentlyDrawing()) {
+      gLassoRenderPipeline.render(offscreenRenderPass);
+    }
+
     offscreenRenderPass.end();
     //ATM i only care about picking if the cutting cube is on. In the future, when i pick more things,
     //that'll change
