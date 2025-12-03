@@ -68,9 +68,9 @@ let gDensityScale: number = 0.5;
 let gAmbient: number = 0.3;
 
 let gStepSizeLQ: number = 0.006;
-let gStepSizeHQ: number = 0.001;
+let gStepSizeHQ: number = 0.003;
 let gOffscreenBufferScaleLQ: number = 0.5;
-let gOffscreenBufferScaleHQ: number = 1.0;
+let gOffscreenBufferScaleHQ: number = 0.8;
 let gPreviousOffscreenBufferScaleLQ:number = 0.5;
 let gPreviousOffscreenBufferScaleHQ:number = 1.0;
 let gPreviousCanvasWidth: number = 0;
@@ -169,7 +169,7 @@ const graphicsContext = new GraphicsContext("canvas",
     //Create the camera
     const aspect = ctx.Canvas().clientWidth / ctx.Canvas().clientHeight;
     gCamera.setPerspectiveReversedInfinite((30.0 * Math.PI) / 180, aspect, 0.1);     
-    gCamera.lookAt(vec3.fromValues(0,0,-2), vec3.fromValues(0,0,0), vec3.fromValues(0,1,0));
+    gCamera.lookAt(vec3.fromValues(0,0,-4), vec3.fromValues(0,0,0), vec3.fromValues(0,1,0));
     //create the game objct that'll hold the transform
     volumeRoot = new GameObject("Volume Root");
     //extract the rotation from the direction cosines:
@@ -201,7 +201,7 @@ const graphicsContext = new GraphicsContext("canvas",
     gQuadRendererPipeline = new FullscreenQuadPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
     gQuadRendererPipeline.setTexture(gOffscreenRenderTarget.getColorTargetView());
     //CUTTING CUBE: Create the cutting cube instance (rendered with wireframe pipeline)
-    gCuttingCube = new CuttingCube(-0.5, 0.5, -0.5, 0.5, -0.5, 0.5); // Start with a smaller cube
+    gCuttingCube = new CuttingCube(-1, 1, -1, 1, -1, 1); // Start with a smaller cube
     //WIDGETS: Create the unshaded color pipeline for face widgets
     const widgetShaderCode = await fetch('shaders/unshaded_color.wgsl').then(r => r.text());
     gWidgetPipeline = new UnshadedColorPipeline(ctx, widgetShaderCode, navigator.gpu.getPreferredCanvasFormat());
