@@ -211,44 +211,58 @@ export class LassoComputePipeline {
 
     console.log(`🔄 Computing mask in ${numChunks} chunks (${CHUNK_SIZE} Z-workgroups per chunk)...`);
 
-    // DEBUG: Test where center voxel projects
+    // DEBUG: Test where various voxels project
     if (contours.length > 0) {
-      const centerVoxel = [this.volumeWidth / 2, this.volumeHeight / 2, this.volumeDepth / 2];
-      const normalized = [
-        centerVoxel[0] / (this.volumeWidth - 1),
-        centerVoxel[1] / (this.volumeHeight - 1),
-        centerVoxel[2] / (this.volumeDepth - 1)
-      ];
-      const volumeSpace = [
-        normalized[0] * 2 - 1,
-        normalized[1] * 2 - 1,
-        normalized[2] * 2 - 1
-      ];
-      const worldPos4 = vec4.fromValues(volumeSpace[0], volumeSpace[1], volumeSpace[2], 1.0);
-      vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
-
       const contour = contours[0];
+      const viewProj = mat4.create();
+      mat4.multiply(viewProj, contour.cameraProjectionMatrix, contour.cameraViewMatrix);
 
-      // DEBUG: Print matrices to verify they're valid
+      // Test function to project a voxel to NDC
+      const projectVoxel = (vx: number, vy: number, vz: number): [number, number] | null => {
+        const normalized = [
+          vx / (this.volumeWidth - 1),
+          vy / (this.volumeHeight - 1),
+          vz / (this.volumeDepth - 1)
+        ];
+        const volumeSpace = [
+          normalized[0] * 2 - 1,
+          normalized[1] * 2 - 1,
+          normalized[2] * 2 - 1
+        ];
+        const worldPos4 = vec4.fromValues(volumeSpace[0], volumeSpace[1], volumeSpace[2], 1.0);
+        vec4.transformMat4(worldPos4, worldPos4, modelMatrix);
+
+        const clipPos = vec4.create();
+        vec4.transformMat4(clipPos, worldPos4, viewProj);
+
+        if (clipPos[3] > 0) {
+          return [clipPos[0] / clipPos[3], clipPos[1] / clipPos[3]];
+        }
+        return null;
+      };
+
+      // DEBUG: Print matrices
       console.log(`  View matrix row 0: [${contour.cameraViewMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
       console.log(`  View matrix row 3: [${contour.cameraViewMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
       console.log(`  Proj matrix row 0: [${contour.cameraProjectionMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
       console.log(`  Proj matrix row 3: [${contour.cameraProjectionMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
 
-      // No transpose needed - gl-matrix uses same layout throughout codebase
-      const viewProj = mat4.create();
-      mat4.multiply(viewProj, contour.cameraProjectionMatrix, contour.cameraViewMatrix);
+      // Test center and corners at mid-depth
+      const midZ = this.volumeDepth / 2;
+      const centerNDC = projectVoxel(this.volumeWidth / 2, this.volumeHeight / 2, midZ);
+      const topLeftNDC = projectVoxel(0, 0, midZ);
+      const topRightNDC = projectVoxel(this.volumeWidth - 1, 0, midZ);
+      const bottomLeftNDC = projectVoxel(0, this.volumeHeight - 1, midZ);
+      const bottomRightNDC = projectVoxel(this.volumeWidth - 1, this.volumeHeight - 1, midZ);
 
-      const clipPos = vec4.create();
-      vec4.transformMat4(clipPos, worldPos4, viewProj);
+      console.log(`  🧪 Voxel projections at Z=${midZ.toFixed(0)}:`);
+      if (centerNDC) console.log(`    Center: (${centerNDC[0].toFixed(3)}, ${centerNDC[1].toFixed(3)})`);
+      if (topLeftNDC) console.log(`    Top-Left: (${topLeftNDC[0].toFixed(3)}, ${topLeftNDC[1].toFixed(3)})`);
+      if (topRightNDC) console.log(`    Top-Right: (${topRightNDC[0].toFixed(3)}, ${topRightNDC[1].toFixed(3)})`);
+      if (bottomLeftNDC) console.log(`    Bottom-Left: (${bottomLeftNDC[0].toFixed(3)}, ${bottomLeftNDC[1].toFixed(3)})`);
+      if (bottomRightNDC) console.log(`    Bottom-Right: (${bottomRightNDC[0].toFixed(3)}, ${bottomRightNDC[1].toFixed(3)})`);
 
-      if (clipPos[3] > 0) {
-        const ndcX = clipPos[0] / clipPos[3];
-        const ndcY = clipPos[1] / clipPos[3];
-        console.log(`  🧪 Center voxel projects to NDC (${ndcX.toFixed(3)}, ${ndcY.toFixed(3)})`);
-      } else {
-        console.log(`  🧪 Center voxel is behind camera (w=${clipPos[3].toFixed(3)})`);
-      }
+      console.log(`  📦 Lasso AABB: X[${contour.points.reduce((min, p) => Math.min(min, p[0]), 999).toFixed(3)}, ${contour.points.reduce((max, p) => Math.max(max, p[0]), -999).toFixed(3)}], Y[${contour.points.reduce((min, p) => Math.min(min, p[1]), 999).toFixed(3)}, ${contour.points.reduce((max, p) => Math.max(max, p[1]), -999).toFixed(3)}]`);
     }
 
     // Process each chunk with a delay to allow rendering
