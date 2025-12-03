@@ -53,7 +53,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
-      
+
       setPosition({
         x: e.clientX - dragStart.current.x,
         y: e.clientY - dragStart.current.y
@@ -64,14 +64,34 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
       setIsDragging(false);
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging || e.touches.length !== 1) return;
+
+      const touch = e.touches[0];
+      setPosition({
+        x: touch.clientX - dragStart.current.x,
+        y: touch.clientY - dragStart.current.y
+      });
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+    };
+
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+      document.addEventListener('touchcancel', handleTouchEnd);
     }
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, [isDragging]);
 
@@ -81,6 +101,20 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
       dragStart.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
+      };
+      setIsDragging(true);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (rect) {
+      dragStart.current = {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
       };
       setIsDragging(true);
     }
@@ -112,6 +146,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     >
       <div
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
         style={{
           padding: '10px',
           backgroundColor: 'rgba(40, 40, 40, 0.8)',
@@ -130,6 +165,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         <button
           onClick={toggleMinimize}
           onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           style={{
             background: 'none',
             border: 'none',
