@@ -216,8 +216,13 @@ export class LassoInputHandler {
 
     // CRITICAL FIX: Camera.viewMatrix is never updated, so we compute it ourselves
     // from position and rotation quaternion (same logic as Camera.updateViewMatrix())
+
+    // DEBUG: Check camera rotation quaternion
+    console.log(`  📐 Camera rotation quat: [${Array.from(this.camera.rotation).map(v => v.toFixed(3)).join(', ')}]`);
+
     const rotationMatrix = mat4.create();
     mat4.fromQuat(rotationMatrix, this.camera.rotation);
+    console.log(`  📐 Rotation matrix row 0: [${rotationMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
 
     const negatedPosition = vec3.create();
     vec3.negate(negatedPosition, this.camera.position);
@@ -226,6 +231,7 @@ export class LassoInputHandler {
 
     const cameraViewMatrix = mat4.create();
     mat4.multiply(cameraViewMatrix, rotationMatrix, translationMatrix);
+    console.log(`  📐 View matrix row 0: [${cameraViewMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
 
     const cameraProjectionMatrix = mat4.clone(this.camera.projectionMatrix);
 
