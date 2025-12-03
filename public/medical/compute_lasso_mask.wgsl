@@ -40,7 +40,12 @@ fn voxelToWorld(voxelIndex: vec3<u32>) -> vec3<f32> {
   );
 
   // Convert to [-1, 1] volume space
-  let volumeSpace = normalized * 2.0 - 1.0;
+  // FLIP X: Voxel coordinate system is mirrored from NDC coordinate system
+  let volumeSpace = vec3<f32>(
+    -(normalized.x * 2.0 - 1.0),  // Flip X axis
+    normalized.y * 2.0 - 1.0,
+    normalized.z * 2.0 - 1.0
+  );
 
   // Transform to world space (voxel spacing NOT applied here - it's only for ray marching)
   let worldPos = params.modelMatrix * vec4<f32>(volumeSpace, 1.0);
