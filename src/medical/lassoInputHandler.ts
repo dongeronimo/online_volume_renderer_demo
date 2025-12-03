@@ -278,7 +278,8 @@ export class LassoInputHandler {
     const canvasY = clientY - rect.top;
 
     // Convert to NDC [-1, 1]
-    const ndcX = (canvasX / rect.width) * 2 - 1;
+    // FLIP X: Volume texture coordinate system is horizontally mirrored
+    const ndcX = -((canvasX / rect.width) * 2 - 1);
     const ndcY = -((canvasY / rect.height) * 2 - 1); // Flip Y (canvas Y is top-down)
 
     return vec2.fromValues(ndcX, ndcY);
