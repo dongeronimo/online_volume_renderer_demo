@@ -15,18 +15,30 @@ import { config } from "./config";
 import { VolumeRenderPipelineCTF } from "./volume_raycast_pipeline_ctf";
 import { Root } from "./ui/root";
 import { rootEventsTarget } from "./ui/events";
+import { CuttingCube } from "../graphics/cuttingCube";
+import { UnshadedColorPipeline } from "../graphics/unshadedColorPipeline";
+import { WireframePipeline } from "../graphics/wireframePipeline";
+import { PickingPipeline } from "../graphics/pickingPipeline";
+import { PickingRenderTarget } from "./picking_render_target";
+import { WidgetDragHandler } from "../graphics/widgetDragHandler";
 //Which pipeline to use?
 enum Pipeline_t {
   WindowLevel, CTF
 };
 let gCurrentPipelineType : Pipeline_t;
-
+let gCuttingCubeIsOn:boolean = true;
 const gMeshBufferManager:MeshBufferManager = new MeshBufferManager();
 const gCamera:Camera = new Camera();
 const gOffscreenRenderTarget = new OffscreenRenderTarget();
 let gVolumeRenderPipeline: VolumeRenderPipeline|undefined = undefined;
 let gCTFVolumeRenderPipeline: VolumeRenderPipelineCTF|undefined = undefined;
 let gQuadRendererPipeline: FullscreenQuadPipeline|undefined = undefined;
+let gCuttingCube: CuttingCube|undefined = undefined;
+let gWidgetPipeline: UnshadedColorPipeline|undefined = undefined;
+let gWireframePipeline: WireframePipeline|undefined = undefined;
+let gPickingPipeline: PickingPipeline|undefined = undefined;
+let gPickingRenderTarget: PickingRenderTarget = new PickingRenderTarget();
+let gWidgetDragHandler: WidgetDragHandler|undefined = undefined;
 let dicomMetadata: ParsedDicomMetadata|undefined = undefined;
 let originalVolume: GPUTexture|undefined = undefined;
 let volumeRoot:GameObject|undefined = undefined;
@@ -53,6 +65,8 @@ let gOffscreenBufferScaleLQ: number = 0.5;
 let gOffscreenBufferScaleHQ: number = 1.0;
 let gPreviousOffscreenBufferScaleLQ:number = 0.5;
 let gPreviousOffscreenBufferScaleHQ:number = 1.0;
+let gPreviousCanvasWidth: number = 0;
+let gPreviousCanvasHeight: number = 0;
 let gUseGradientLQ = 0;
 let gUseGradientHQ = 1;
 let gDensityForMarchSpaceSkippingLQ: number = 0.02;
@@ -178,16 +192,57 @@ const graphicsContext = new GraphicsContext("canvas",
     //RENDERTARGET: Create a pipeline to draw the rendertarget
     gQuadRendererPipeline = new FullscreenQuadPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
     gQuadRendererPipeline.setTexture(gOffscreenRenderTarget.getColorTargetView());
+    //CUTTING CUBE: Create the cutting cube instance (rendered with wireframe pipeline)
+    gCuttingCube = new CuttingCube(-0.5, 0.5, -0.5, 0.5, -0.5, 0.5); // Start with a smaller cube
+    //WIDGETS: Create the unshaded color pipeline for face widgets
+    const widgetShaderCode = await fetch('shaders/unshaded_color.wgsl').then(r => r.text());
+    gWidgetPipeline = new UnshadedColorPipeline(ctx, widgetShaderCode, navigator.gpu.getPreferredCanvasFormat());
+    //WIREFRAME: Create the wireframe pipeline for cutting cube and widget outlines
+    const wireframeShaderCode = await fetch('shaders/wireframe.wgsl').then(r => r.text());
+    gWireframePipeline = new WireframePipeline(ctx, wireframeShaderCode, navigator.gpu.getPreferredCanvasFormat());
+    //PICKING: Create the picking pipeline and render target
+    const pickingShaderCode = await fetch('shaders/picking.wgsl').then(r => r.text());
+    gPickingPipeline = new PickingPipeline(ctx, pickingShaderCode);
+    gPickingRenderTarget.init(ctx.Device());
+    gPickingRenderTarget.createTarget(
+      Math.floor(ctx.Canvas().clientWidth * gOffscreenBufferScaleLQ),
+      Math.floor(ctx.Canvas().clientHeight * gOffscreenBufferScaleLQ)
+    );
     //set up the event handler
     gMouseEventHandler = new RotateAround(ctx.Canvas(), gCamera,
-      ()=>{ 
+      ()=>{
         usingHQ = false;
         numberOfHQRenderings = 0;
       },
-      ()=>{ 
+      ()=>{
         usingHQ = true;
         numberOfHQRenderings = 0;
       });
+
+    // Set up widget drag handler
+    gWidgetDragHandler = new WidgetDragHandler(
+      ctx.Canvas(),
+      gPickingRenderTarget,
+      gCuttingCube,
+      gMouseEventHandler,
+      gCamera
+    );
+
+    // Set selection callback to manage quality mode
+    gWidgetDragHandler.setSelectionCallback((widgetId: number | null) => {
+      if (widgetId !== null) {
+        // Widget selected - switch to LQ mode
+        usingHQ = false;
+        numberOfHQRenderings = 0;
+        const faceNames = ['+X (Red)', '-X (Cyan)', '+Y (Green)', '-Y (Magenta)', '+Z (Blue)', '-Z (Yellow)'];
+        console.log(`Selected face widget ${widgetId}: ${faceNames[widgetId - 1]}`);
+      } else {
+        // Widget deselected - switch to HQ mode
+        usingHQ = true;
+        numberOfHQRenderings = 0;
+        console.log('Widget deselected');
+      }
+    });
     //set up min and max
     gMinValue = parsed.huMin;
     gMaxValue = parsed.huMax;
@@ -209,21 +264,33 @@ const graphicsContext = new GraphicsContext("canvas",
       return;
     else if(usingHQ)
       numberOfHQRenderings++;
-    //if the user changed the scale in the ui, update the texture size here.
+    //if the user changed the scale in the ui or the canvas was resized, update the texture size here.
+    const currentCanvasWidth = ctx.Canvas().clientWidth;
+    const currentCanvasHeight = ctx.Canvas().clientHeight;
+    const canvasSizeChanged = (gPreviousCanvasWidth !== currentCanvasWidth || gPreviousCanvasHeight !== currentCanvasHeight);
+
     if(usingHQ){
-      if(gPreviousOffscreenBufferScaleHQ !== gOffscreenBufferScaleHQ){
-        gOffscreenRenderTarget.createTargets(ctx.Canvas().clientWidth * gOffscreenBufferScaleHQ, 
-          ctx.Canvas().clientHeight* gOffscreenBufferScaleHQ);
+      if(gPreviousOffscreenBufferScaleHQ !== gOffscreenBufferScaleHQ || canvasSizeChanged){
+        const width = Math.floor(currentCanvasWidth * gOffscreenBufferScaleHQ);
+        const height = Math.floor(currentCanvasHeight * gOffscreenBufferScaleHQ);
+        gOffscreenRenderTarget.createTargets(width, height);
         gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
+        gPickingRenderTarget.createTarget(width, height);
         gPreviousOffscreenBufferScaleHQ = gOffscreenBufferScaleHQ;
+        gPreviousCanvasWidth = currentCanvasWidth;
+        gPreviousCanvasHeight = currentCanvasHeight;
       }
     }
     else {
-      if(gPreviousOffscreenBufferScaleLQ !== gOffscreenBufferScaleLQ){
-        gOffscreenRenderTarget.createTargets(ctx.Canvas().clientWidth * gOffscreenBufferScaleLQ, 
-          ctx.Canvas().clientHeight* gOffscreenBufferScaleLQ);
+      if(gPreviousOffscreenBufferScaleLQ !== gOffscreenBufferScaleLQ || canvasSizeChanged){
+        const width = Math.floor(currentCanvasWidth * gOffscreenBufferScaleLQ);
+        const height = Math.floor(currentCanvasHeight * gOffscreenBufferScaleLQ);
+        gOffscreenRenderTarget.createTargets(width, height);
         gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
+        gPickingRenderTarget.createTarget(width, height);
         gPreviousOffscreenBufferScaleLQ = gOffscreenBufferScaleLQ;
+        gPreviousCanvasWidth = currentCanvasWidth;
+        gPreviousCanvasHeight = currentCanvasHeight;
       }
     }
     //create the render pass
@@ -267,8 +334,8 @@ const graphicsContext = new GraphicsContext("canvas",
         stepSize: !usingHQ?gStepSizeLQ:gStepSizeHQ,
         densityScale: gDensityScale,
         inverseModelMatrix: volumeRoot!.transform!.getInverseWorldMatrix(),
-        windowCenter: gLevel, 
-        windowWidth: gWindow, 
+        windowCenter: gLevel,
+        windowWidth: gWindow,
         voxelSpacing: voxelSpacingBuffer,
         toggleGradient: !usingHQ?gUseGradientLQ:gUseGradientHQ,
         volumeWidth: dicomMetadata!.width,
@@ -286,7 +353,13 @@ const graphicsContext = new GraphicsContext("canvas",
         maxSteps: !usingHQ?gMaxStepsLQ:gMaxStepsHQ,
         minGradientMagnitude: !usingHQ?gMinGradientMagnitudeLQ:gMinGradientMagnitudeHQ,
         accumulatedThreshold: !usingHQ?gAccumulatedThresholdLQ:gAccumulatedThresholdHQ,
-        transmittanceThreshold: !usingHQ?gTransmittanceThresholdLQ:gTransmittanceThresholdHQ
+        transmittanceThreshold: !usingHQ?gTransmittanceThresholdLQ:gTransmittanceThresholdHQ,
+        xmin: gCuttingCube?.xmin ?? -1.0,
+        xmax: gCuttingCube?.xmax ?? 1.0,
+        ymin: gCuttingCube?.ymin ?? -1.0,
+        ymax: gCuttingCube?.ymax ?? 1.0,
+        zmin: gCuttingCube?.zmin ?? -1.0,
+        zmax: gCuttingCube?.zmax ?? 1.0
       });
       let mesh = gMeshBufferManager.getMesh("cube")!
       // Render the volume (single cube with bricking acceleration)
@@ -306,12 +379,151 @@ const graphicsContext = new GraphicsContext("canvas",
         volumeDepth: dicomMetadata!.numSlices!,
         volumeHeight: dicomMetadata!.height,
         volumeWidth:  dicomMetadata!.width,
-        voxelSpacing: voxelSpacingBuffer
+        voxelSpacing: voxelSpacingBuffer,
+        xmin: gCuttingCube?.xmin ?? -1.0,
+        xmax: gCuttingCube?.xmax ?? 1.0,
+        ymin: gCuttingCube?.ymin ?? -1.0,
+        ymax: gCuttingCube?.ymax ?? 1.0,
+        zmin: gCuttingCube?.zmin ?? -1.0,
+        zmax: gCuttingCube?.zmax ?? 1.0
       });
       let mesh = gMeshBufferManager.getMesh("cube")!;
       gCTFVolumeRenderPipeline?.render(offscreenRenderPass, mesh.vertexBuffer, mesh.indexBuffer, mesh.indexCount);
     }
+    //I'll render the cutting cube only if the flag is on.
+    if(gCuttingCubeIsOn){
+      // Render the cutting cube as wireframe (opaque white)
+      // RENDERING STRATEGY: Cutting cube is now rendered only as wireframe for better visibility
+      // No translucent faces - wireframe edges are much clearer for understanding cube bounds
+      if (gWireframePipeline && gCuttingCube) {
+        const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+        let mesh = gMeshBufferManager.getMesh("cube") as StaticMesh;
+        const whiteColor = [1.0, 1.0, 1.0, 1.0]; // Opaque white wireframe
+        gWireframePipeline.renderWireframe(
+          0,                           // Object index 0 for cutting cube
+          viewProj,
+          gCuttingCube.getModelMatrix(),
+          whiteColor,
+          offscreenRenderPass,
+          mesh.vertexBuffer,
+          mesh.edgeIndexBuffer,        // Use edge indices for line-list rendering
+          mesh.edgeCount               // Number of edge indices (pairs of vertices)
+        );
+      }
+
+      // Render face widgets with new visualization strategy
+      // RENDERING STRATEGY:
+      // - Unselected widgets: wireframe (opaque, colored) + solid (translucent, ~15% opacity)
+      //   This provides clear outline + subtle hint of widget volume
+      // - Selected widget: solid only (opaque, colored)
+      //   Clear visual feedback that this widget is being manipulated
+      if (gWidgetPipeline && gWireframePipeline && gCuttingCube && gWidgetDragHandler) {
+        const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+        const faceWidgets = gCuttingCube.getFaceWidgets();
+        const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName()) as StaticMesh;
+        const selectedWidgetId = gWidgetDragHandler.getSelectedWidgetId(); // null if none selected
+
+        // Colors for each face widget (RGB channels stay same, alpha varies)
+        // Widget IDs are 1-based (1-6), but array is 0-based
+        const baseColors = [
+          [1.0, 0.0, 0.0],  // +X (right) - Red
+          [0.0, 1.0, 1.0],  // -X (left) - Cyan
+          [0.0, 1.0, 0.0],  // +Y (top) - Green
+          [1.0, 0.0, 1.0],  // -Y (bottom) - Magenta
+          [0.0, 0.0, 1.0],  // +Z (front) - Blue
+          [1.0, 1.0, 0.0],  // -Z (back) - Yellow
+        ];
+
+        faceWidgets.forEach((widget, index) => {
+          const widgetId = index + 1; // Convert 0-based index to 1-based ID
+          const isSelected = (widgetId === selectedWidgetId);
+          const [r, g, b] = baseColors[index];
+
+          if (isSelected) {
+            // SELECTED WIDGET: Render only as opaque solid
+            // Provides clear feedback that this widget is actively being dragged
+            const opaqueColor = [r, g, b, 1.0];
+            gWidgetPipeline!.renderWidget(
+              index,
+              viewProj,
+              widget.modelMatrix,
+              opaqueColor,
+              offscreenRenderPass,
+              widgetMesh.vertexBuffer,
+              widgetMesh.indexBuffer,
+              widgetMesh.indexCount
+            );
+          } else {
+            // UNSELECTED WIDGET: Render twice for layered effect
+
+            // 1. First pass: Opaque wireframe outline
+            //    Provides clear edge definition regardless of viewing angle
+            const opaqueWireframeColor = [r, g, b, 1.0];
+            gWireframePipeline!.renderWireframe(
+              index + 1,  // Object indices 1-6 for widgets (0 is cutting cube)
+              viewProj,
+              widget.modelMatrix,
+              opaqueWireframeColor,
+              offscreenRenderPass,
+              widgetMesh.vertexBuffer,
+              widgetMesh.edgeIndexBuffer,  // Use edge indices for line-list rendering
+              widgetMesh.edgeCount         // Number of edge indices
+            );
+
+            // 2. Second pass: Translucent solid fill
+            //    Subtle hint of widget volume without obscuring the volume data
+            //    Alpha = 0.15 provides just enough visibility without being distracting
+            const translucentColor = [r, g, b, 0.15];
+            gWidgetPipeline!.renderWidget(
+              index,
+              viewProj,
+              widget.modelMatrix,
+              translucentColor,
+              offscreenRenderPass,
+              widgetMesh.vertexBuffer,
+              widgetMesh.indexBuffer,
+              widgetMesh.indexCount
+            );
+          }
+        });
+      }
+    }
     offscreenRenderPass.end();
+    //ATM i only care about picking if the cutting cube is on. In the future, when i pick more things,
+    //that'll change
+    if(gCuttingCubeIsOn){
+      // PICKING PASS: Render widgets to picking buffer
+      if (gPickingPipeline && gCuttingCube) {
+        const pickingPass = commandEncoder.beginRenderPass({
+          label: 'Picking Render Pass',
+          colorAttachments: [{
+            view: gPickingRenderTarget.getPickingTextureView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 0 }, // Clear to 0 (no object)
+            loadOp: 'clear',
+            storeOp: 'store',
+          }],
+        });
+
+        const viewProj = mat4.multiply(mat4.create(), gCamera.projectionMatrix, gCamera.viewMatrix);
+        const faceWidgets = gCuttingCube.getFaceWidgets();
+        const widgetMesh = gMeshBufferManager.getMesh(gCuttingCube.getWidgetMeshName())!;
+
+        // Render each widget with its ID (1-6, 0 is background)
+        faceWidgets.forEach((widget, index) => {
+          gPickingPipeline!.renderObject(
+            index,           // Object index in pool
+            index + 1,       // Object ID (1-6)
+            viewProj,
+            widget.modelMatrix,
+            pickingPass,
+            widgetMesh.vertexBuffer,
+            widgetMesh.indexBuffer,
+            widgetMesh.indexCount
+          );
+        });
+        pickingPass.end();
+      }
+    }
 
     const screenPass = commandEncoder.beginRenderPass({
       label: 'Screen Render Pass',
@@ -330,11 +542,15 @@ const graphicsContext = new GraphicsContext("canvas",
     //Update the camera properties
     numberOfHQRenderings = 0; //we have to reset the number of high quality renders or else it won't render when we resize.
     const aspect = width / height;
-    gCamera.setPerspectiveReversedInfinite((30.0 * Math.PI) / 180, aspect, 0.1);  
+    gCamera.setPerspectiveReversedInfinite((30.0 * Math.PI) / 180, aspect, 0.1);
     //RENDERTARGET: Resize the render target
-    gOffscreenRenderTarget.createTargets(width * gOffscreenBufferScaleLQ, height * gOffscreenBufferScaleLQ);
+    const targetWidth = Math.floor(width * gOffscreenBufferScaleLQ);
+    const targetHeight = Math.floor(height * gOffscreenBufferScaleLQ);
+    gOffscreenRenderTarget.createTargets(targetWidth, targetHeight);
     //RENDERTARGET: Recreate the pipeline
     gQuadRendererPipeline?.setTexture(gOffscreenRenderTarget.getColorTargetView());
+    //PICKING: Resize picking render target
+    gPickingRenderTarget.createTarget(targetWidth, targetHeight);
   },
   (adapter:GPUAdapter)=>{
     const desc:GPUDeviceDescriptor = {
@@ -366,6 +582,16 @@ rootEventsTarget.addEventListener('pipeline-changed', (e:Event)=>{
   } else {
     gCurrentPipelineType = Pipeline_t.CTF;
   }
+  numberOfHQRenderings = 0;
+});
+//Handle the cutting cube button. When the button in tools is clicked it will trigger this event 
+//and this event will toggle the cube on/off. By toggling the cube on/off i mean the visualization
+//of the cube, not it's effects on the volume renderer.
+rootEventsTarget.addEventListener('toggle-cutting-cube', (e:Event)=>{
+  const {v} = (e as CustomEvent).detail;
+  const val = v as boolean;
+  console.log("toggling cutting cube");
+  gCuttingCubeIsOn = val;
   numberOfHQRenderings = 0;
 });
 

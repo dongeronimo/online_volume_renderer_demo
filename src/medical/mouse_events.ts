@@ -2,18 +2,28 @@ import { quat, vec3 } from "gl-matrix";
 import type { Camera } from "../graphics/entities/gameObject";
 
 export default class RotateAround {
+    private enabled = true;
     private isRotating = false;  // Left button
     private isPanning = false;   // Right button
     private lastMouseX = 0;
     private lastMouseY = 0;
     private distance = 2;
-    
+
     // Track camera orientation and up vector
     private orientation = quat.create();
     private currentUp = vec3.fromValues(0, 1, 0);
     private lookAtTarget = vec3.fromValues(0, 0, 0);  // Pan target
-    
+
     readonly worldUp = vec3.fromValues(0, 1, 0);
+
+    public setEnabled(enabled: boolean): void {
+        this.enabled = enabled;
+        if (!enabled) {
+            // Disable any ongoing interactions
+            this.isRotating = false;
+            this.isPanning = false;
+        }
+    }
 
     constructor(canvas: HTMLCanvasElement, private gCamera: Camera,
         onBeginMovement:()=>void,
@@ -22,6 +32,8 @@ export default class RotateAround {
         quat.copy(this.orientation, gCamera.rotation);
         
         canvas.addEventListener('mousedown', (e) => {
+            if (!this.enabled) return;
+
             if (e.button === 0) {  // Left button - rotate
                 this.isRotating = true;
             } else if (e.button === 2) {  // Right button - pan
@@ -35,15 +47,17 @@ export default class RotateAround {
         });
         
         canvas.addEventListener('mousemove', (e) => {
+            if (!this.enabled) return;
+
             const deltaX = e.clientX - this.lastMouseX;
             const deltaY = e.clientY - this.lastMouseY;
-            
+
             if (this.isRotating) {
                 this.handleRotate(deltaX, deltaY);
             } else if (this.isPanning) {
                 this.handlePan(deltaX, deltaY);
             }
-            
+
             this.lastMouseX = e.clientX;
             this.lastMouseY = e.clientY;
         });
@@ -66,6 +80,8 @@ export default class RotateAround {
         });
         
         canvas.addEventListener('wheel', (e) => {
+            if (!this.enabled) return;
+
             onBeginMovement();
             e.preventDefault();
             this.distance += e.deltaY * 0.01;
