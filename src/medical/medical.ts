@@ -377,8 +377,61 @@ const graphicsContext = new GraphicsContext("canvas",
         } else {
           console.log('🎨 LASSO MODE DISABLED');
         }
+
+        // Notify UI of state change
+        import('./ui/lassoControlsPanel').then(module => {
+          module.lassoStateChangeEvent.dispatchEvent(new Event('change'));
+        });
       }
     });
+
+    // LASSO: Expose controls to React UI
+    (window as any).lassoControls = {
+      toggleLassoMode: () => {
+        const wasEnabled = gLassoInputHandler?.isEnabled() ?? false;
+        gLassoInputHandler?.setEnabled(!wasEnabled);
+        const newState = gLassoInputHandler?.isEnabled() ?? false;
+        console.log(`🎨 LASSO MODE ${newState ? 'ENABLED' : 'DISABLED'}`);
+        return newState;
+      },
+      isLassoEnabled: () => {
+        return gLassoInputHandler?.isEnabled() ?? false;
+      },
+      undo: () => {
+        gLassoManager?.undo();
+        // Recompute mask after undo
+        if (gLassoManager && gLassoComputePipeline) {
+          const contours = gLassoManager.getActiveContours();
+          const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
+          gLassoComputePipeline.computeMask(contours, modelMatrix).then(() => {
+            gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gLassoManager!.markClean();
+            console.log('✓ Undo: Mask recomputed');
+          });
+        }
+      },
+      redo: () => {
+        gLassoManager?.redo();
+        // Recompute mask after redo
+        if (gLassoManager && gLassoComputePipeline) {
+          const contours = gLassoManager.getActiveContours();
+          const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
+          gLassoComputePipeline.computeMask(contours, modelMatrix).then(() => {
+            gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gLassoManager!.markClean();
+            console.log('✓ Redo: Mask recomputed');
+          });
+        }
+      },
+      canUndo: () => {
+        return gLassoManager?.canUndo() ?? false;
+      },
+      canRedo: () => {
+        return gLassoManager?.canRedo() ?? false;
+      }
+    };
 
     //set up min and max
     gMinValue = parsed.huMin;

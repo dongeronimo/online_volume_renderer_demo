@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FloatingPanel } from '../editor/components/floatingPanel';
 import { FloatEditor } from '../editor/components/floatEditor';
 import { CheckboxEditor } from '../editor/components/checkboxEditor';
+import { LassoControlsPanel } from './ui/lassoControlsPanel';
 import { Minus, Plus } from 'lucide-react';
 
 
@@ -330,7 +331,10 @@ export const UiRoot: React.FC<UiRoot> =
     };    
     return (
         <div>
-            <FloatingPanel title='Render Settings' initialX={0} initialY={0}>
+            <FloatingPanel title='Lasso Tools' initialX={0} initialY={0} width={220} height={180}>
+                <LassoControlsPanel />
+            </FloatingPanel>
+            <FloatingPanel title='Render Settings' initialX={0} initialY={200}>
                 <div>
                     <label>Window:</label>
                     <button onClick={decrementWindow}><Minus size={14} /></button>
@@ -357,7 +361,7 @@ export const UiRoot: React.FC<UiRoot> =
                     <label>Ambient:</label><FloatEditor width={45} value={_ambient} onChange={handleAmbChange}/>
                 </div>
             </FloatingPanel>
-            <FloatingPanel title="Quality settings" initialX={200} initialY={0} height={512} width={490}>
+            <FloatingPanel title="Quality settings" initialX={240} initialY={0} height={512} width={490}>
                 <table style={{width:'100%'}}>
                     <thead>
                     <tr>

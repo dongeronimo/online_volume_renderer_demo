@@ -80,9 +80,16 @@ export class LassoInputHandler {
   }
 
   private setupEventListeners(): void {
+    // Mouse events
     this.canvas.addEventListener('mousedown', this.handleMouseDown);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
     this.canvas.addEventListener('mouseup', this.handleMouseUp);
+
+    // Touch events
+    this.canvas.addEventListener('touchstart', this.handleTouchStart);
+    this.canvas.addEventListener('touchmove', this.handleTouchMove);
+    this.canvas.addEventListener('touchend', this.handleTouchEnd);
+    this.canvas.addEventListener('touchcancel', this.handleTouchCancel);
 
     // Prevent context menu during lasso drawing
     this.canvas.addEventListener('contextmenu', (e) => {
@@ -113,6 +120,38 @@ export class LassoInputHandler {
 
     e.preventDefault();
     this.finishDrawing();
+  };
+
+  private handleTouchStart = (e: TouchEvent): void => {
+    if (!this.enabled) return;
+    if (e.touches.length !== 1) return; // Only single touch
+
+    e.preventDefault();
+    const touch = e.touches[0];
+    this.startDrawing(touch.clientX, touch.clientY);
+  };
+
+  private handleTouchMove = (e: TouchEvent): void => {
+    if (!this.isDrawing) return;
+    if (e.touches.length !== 1) return;
+
+    e.preventDefault();
+    const touch = e.touches[0];
+    this.addPoint(touch.clientX, touch.clientY);
+  };
+
+  private handleTouchEnd = (e: TouchEvent): void => {
+    if (!this.isDrawing) return;
+
+    e.preventDefault();
+    this.finishDrawing();
+  };
+
+  private handleTouchCancel = (e: TouchEvent): void => {
+    if (!this.isDrawing) return;
+
+    e.preventDefault();
+    this.cancelDrawing();
   };
 
   private startDrawing(clientX: number, clientY: number): void {
@@ -288,8 +327,15 @@ export class LassoInputHandler {
    * Cleanup event listeners
    */
   destroy(): void {
+    // Remove mouse listeners
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mouseup', this.handleMouseUp);
+
+    // Remove touch listeners
+    this.canvas.removeEventListener('touchstart', this.handleTouchStart);
+    this.canvas.removeEventListener('touchmove', this.handleTouchMove);
+    this.canvas.removeEventListener('touchend', this.handleTouchEnd);
+    this.canvas.removeEventListener('touchcancel', this.handleTouchCancel);
   }
 }
