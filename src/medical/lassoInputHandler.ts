@@ -257,14 +257,10 @@ export class LassoInputHandler {
     centroidY /= points.length;
     const centroid = vec2.fromValues(centroidX, centroidY);
 
-    // FLIP X: Volume texture coordinate system is horizontally mirrored
-    // Flip points for masking, but keep original coordinates for display during drawing
-    const flippedPoints = points.map(p => vec2.fromValues(-p[0], p[1]));
-
     console.log(`Contour camera: pos=${cameraPosition}, normal=${planeNormal}, centroid=${centroid}`);
 
     return {
-      points: flippedPoints,
+      points,
       cameraPosition,
       cameraViewMatrix,
       cameraProjectionMatrix,
