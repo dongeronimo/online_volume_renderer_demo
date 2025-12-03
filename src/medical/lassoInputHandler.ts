@@ -1,4 +1,4 @@
-import { vec2, vec3, mat4, quat } from 'gl-matrix';
+import { vec2, vec3, mat4 } from 'gl-matrix';
 import type { LassoContour } from './lassoDrawing';
 import { LassoManager } from './lassoDrawing';
 import { simplifyContour } from './lassoSimplification';
@@ -80,9 +80,16 @@ export class LassoInputHandler {
   }
 
   private setupEventListeners(): void {
+    // Mouse events
     this.canvas.addEventListener('mousedown', this.handleMouseDown);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
     this.canvas.addEventListener('mouseup', this.handleMouseUp);
+
+    // Touch events
+    this.canvas.addEventListener('touchstart', this.handleTouchStart);
+    this.canvas.addEventListener('touchmove', this.handleTouchMove);
+    this.canvas.addEventListener('touchend', this.handleTouchEnd);
+    this.canvas.addEventListener('touchcancel', this.handleTouchCancel);
 
     // Prevent context menu during lasso drawing
     this.canvas.addEventListener('contextmenu', (e) => {
@@ -113,6 +120,38 @@ export class LassoInputHandler {
 
     e.preventDefault();
     this.finishDrawing();
+  };
+
+  private handleTouchStart = (e: TouchEvent): void => {
+    if (!this.enabled) return;
+    if (e.touches.length !== 1) return; // Only single touch
+
+    e.preventDefault();
+    const touch = e.touches[0];
+    this.startDrawing(touch.clientX, touch.clientY);
+  };
+
+  private handleTouchMove = (e: TouchEvent): void => {
+    if (!this.isDrawing) return;
+    if (e.touches.length !== 1) return;
+
+    e.preventDefault();
+    const touch = e.touches[0];
+    this.addPoint(touch.clientX, touch.clientY);
+  };
+
+  private handleTouchEnd = (e: TouchEvent): void => {
+    if (!this.isDrawing) return;
+
+    e.preventDefault();
+    this.finishDrawing();
+  };
+
+  private handleTouchCancel = (e: TouchEvent): void => {
+    if (!this.isDrawing) return;
+
+    e.preventDefault();
+    this.cancelDrawing();
   };
 
   private startDrawing(clientX: number, clientY: number): void {
@@ -222,7 +261,7 @@ export class LassoInputHandler {
 
     const rotationMatrix = mat4.create();
     mat4.fromQuat(rotationMatrix, this.camera.rotation);
-    console.log(`  📐 Rotation matrix row 0: [${rotationMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+    console.log(`  📐 Rotation matrix row 0: [${Array.from(rotationMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}]`);
 
     const negatedPosition = vec3.create();
     vec3.negate(negatedPosition, this.camera.position);
@@ -231,7 +270,7 @@ export class LassoInputHandler {
 
     const cameraViewMatrix = mat4.create();
     mat4.multiply(cameraViewMatrix, rotationMatrix, translationMatrix);
-    console.log(`  📐 View matrix row 0: [${cameraViewMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+    console.log(`  📐 View matrix row 0: [${Array.from(cameraViewMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}]`);
 
     const cameraProjectionMatrix = mat4.clone(this.camera.projectionMatrix);
 
@@ -288,8 +327,15 @@ export class LassoInputHandler {
    * Cleanup event listeners
    */
   destroy(): void {
+    // Remove mouse listeners
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mouseup', this.handleMouseUp);
+
+    // Remove touch listeners
+    this.canvas.removeEventListener('touchstart', this.handleTouchStart);
+    this.canvas.removeEventListener('touchmove', this.handleTouchMove);
+    this.canvas.removeEventListener('touchend', this.handleTouchEnd);
+    this.canvas.removeEventListener('touchcancel', this.handleTouchCancel);
   }
 }

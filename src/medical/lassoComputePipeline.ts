@@ -1,4 +1,4 @@
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec4 } from 'gl-matrix';
 import type { LassoContour } from './lassoDrawing';
 
 /**
@@ -242,10 +242,10 @@ export class LassoComputePipeline {
       };
 
       // DEBUG: Print matrices
-      console.log(`  View matrix row 0: [${contour.cameraViewMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
-      console.log(`  View matrix row 3: [${contour.cameraViewMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
-      console.log(`  Proj matrix row 0: [${contour.cameraProjectionMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
-      console.log(`  Proj matrix row 3: [${contour.cameraProjectionMatrix.slice(12, 16).map(v => v.toFixed(3)).join(', ')}]`);
+      console.log(`  View matrix row 0: [${Array.from(contour.cameraViewMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}]`);
+      console.log(`  View matrix row 3: [${Array.from(contour.cameraViewMatrix as Float32Array).slice(12, 16).map((v: number) => v.toFixed(3)).join(', ')}]`);
+      console.log(`  Proj matrix row 0: [${Array.from(contour.cameraProjectionMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}]`);
+      console.log(`  Proj matrix row 3: [${Array.from(contour.cameraProjectionMatrix as Float32Array).slice(12, 16).map((v: number) => v.toFixed(3)).join(', ')}]`);
 
       // Test center and corners at mid-depth
       const midZ = this.volumeDepth / 2;
@@ -376,7 +376,7 @@ export class LassoComputePipeline {
       view.setUint32(offset, numPoints, true);
       offset += 4;
 
-      console.log(`  Contour: ${numPoints} points, camera=${contour.cameraPosition.map(v => v.toFixed(2)).join(',')}`);
+      console.log(`  Contour: ${numPoints} points, camera=${Array.from(contour.cameraPosition as Float32Array).map((v: number) => v.toFixed(2)).join(',')}`);
 
       // PADDING: 12 bytes to align next vec3 to offset 16
       offset += 12;

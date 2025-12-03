@@ -68,9 +68,9 @@ let gDensityScale: number = 0.5;
 let gAmbient: number = 0.3;
 
 let gStepSizeLQ: number = 0.006;
-let gStepSizeHQ: number = 0.001;
+let gStepSizeHQ: number = 0.003;
 let gOffscreenBufferScaleLQ: number = 0.5;
-let gOffscreenBufferScaleHQ: number = 1.0;
+let gOffscreenBufferScaleHQ: number = 0.8;
 let gPreviousOffscreenBufferScaleLQ:number = 0.5;
 let gPreviousOffscreenBufferScaleHQ:number = 1.0;
 let gPreviousCanvasWidth: number = 0;
@@ -169,7 +169,7 @@ const graphicsContext = new GraphicsContext("canvas",
     //Create the camera
     const aspect = ctx.Canvas().clientWidth / ctx.Canvas().clientHeight;
     gCamera.setPerspectiveReversedInfinite((30.0 * Math.PI) / 180, aspect, 0.1);     
-    gCamera.lookAt(vec3.fromValues(0,0,-2), vec3.fromValues(0,0,0), vec3.fromValues(0,1,0));
+    gCamera.lookAt(vec3.fromValues(0,0,-4), vec3.fromValues(0,0,0), vec3.fromValues(0,1,0));
     //create the game objct that'll hold the transform
     volumeRoot = new GameObject("Volume Root");
     //extract the rotation from the direction cosines:
@@ -201,7 +201,7 @@ const graphicsContext = new GraphicsContext("canvas",
     gQuadRendererPipeline = new FullscreenQuadPipeline(ctx.Device(), navigator.gpu.getPreferredCanvasFormat());
     gQuadRendererPipeline.setTexture(gOffscreenRenderTarget.getColorTargetView());
     //CUTTING CUBE: Create the cutting cube instance (rendered with wireframe pipeline)
-    gCuttingCube = new CuttingCube(-0.5, 0.5, -0.5, 0.5, -0.5, 0.5); // Start with a smaller cube
+    gCuttingCube = new CuttingCube(-1, 1, -1, 1, -1, 1); // Start with a smaller cube
     //WIDGETS: Create the unshaded color pipeline for face widgets
     const widgetShaderCode = await fetch('shaders/unshaded_color.wgsl').then(r => r.text());
     gWidgetPipeline = new UnshadedColorPipeline(ctx, widgetShaderCode, navigator.gpu.getPreferredCanvasFormat());
@@ -283,7 +283,7 @@ const graphicsContext = new GraphicsContext("canvas",
           const contours = gLassoManager.getActiveContours();
           const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
 
-          console.log(`  Model matrix: [${modelMatrix.slice(0, 4).map(v => v.toFixed(3)).join(', ')}...]`);
+          console.log(`  Model matrix: [${Array.from(modelMatrix as Float32Array).slice(0, 4).map((v: number) => v.toFixed(3)).join(', ')}...]`);
 
           try {
             await gLassoComputePipeline.computeMask(
@@ -314,7 +314,7 @@ const graphicsContext = new GraphicsContext("canvas",
       },
       onPointsUpdate: (points) => {
         // Update render pipeline with current points for real-time feedback
-        gLassoRenderPipeline?.updatePoints(points);
+        gLassoRenderPipeline?.updatePoints(points as unknown as ReadonlyArray<readonly [number, number]>);
 
         // Trigger render to show drawing progress
         numberOfHQRenderings = 0;
@@ -377,8 +377,61 @@ const graphicsContext = new GraphicsContext("canvas",
         } else {
           console.log('🎨 LASSO MODE DISABLED');
         }
+
+        // Notify UI of state change
+        import('./ui/lassoControlsPanel').then(module => {
+          module.lassoStateChangeEvent.dispatchEvent(new Event('change'));
+        });
       }
     });
+
+    // LASSO: Expose controls to React UI
+    (window as any).lassoControls = {
+      toggleLassoMode: () => {
+        const wasEnabled = gLassoInputHandler?.isEnabled() ?? false;
+        gLassoInputHandler?.setEnabled(!wasEnabled);
+        const newState = gLassoInputHandler?.isEnabled() ?? false;
+        console.log(`🎨 LASSO MODE ${newState ? 'ENABLED' : 'DISABLED'}`);
+        return newState;
+      },
+      isLassoEnabled: () => {
+        return gLassoInputHandler?.isEnabled() ?? false;
+      },
+      undo: () => {
+        gLassoManager?.undo();
+        // Recompute mask after undo
+        if (gLassoManager && gLassoComputePipeline) {
+          const contours = gLassoManager.getActiveContours();
+          const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
+          gLassoComputePipeline.computeMask(contours, modelMatrix).then(() => {
+            gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gLassoManager!.markClean();
+            console.log('✓ Undo: Mask recomputed');
+          });
+        }
+      },
+      redo: () => {
+        gLassoManager?.redo();
+        // Recompute mask after redo
+        if (gLassoManager && gLassoComputePipeline) {
+          const contours = gLassoManager.getActiveContours();
+          const modelMatrix = volumeRoot!.transform!.getWorldMatrix();
+          gLassoComputePipeline.computeMask(contours, modelMatrix).then(() => {
+            gVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gCTFVolumeRenderPipeline!.setMaskTexture(gLassoComputePipeline!.getMaskTextureView());
+            gLassoManager!.markClean();
+            console.log('✓ Redo: Mask recomputed');
+          });
+        }
+      },
+      canUndo: () => {
+        return gLassoManager?.canUndo() ?? false;
+      },
+      canRedo: () => {
+        return gLassoManager?.canRedo() ?? false;
+      }
+    };
 
     //set up min and max
     gMinValue = parsed.huMin;
